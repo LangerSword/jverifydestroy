@@ -24,6 +24,7 @@ export PATH=$JAVA_HOME/bin:$HOME/tools/apache-maven-3.9.16/bin:$PATH
 
 mvn -q verify                 # unit + integration tests
 scripts/jvd.sh selftest       # one control-validated memory run
+scripts/jvd-ui.sh             # Swing desktop UI (JDK-only)
 ```
 
 Destroy a file and commit a crypto-shred:
@@ -54,6 +55,9 @@ scripts/jvd.sh txn ./secret.txt --mode overwrite --work .jvd-work
 
 ```mermaid
 flowchart LR
+  UI[jvd-ui Swing] --> TXN
+  UI --> VER
+  UI --> LOG
   CLI[jvd CLI] --> MEM[destroy-memory]
   CLI --> FILE[destroy-file]
   CLI --> TXN[txn]
@@ -79,7 +83,22 @@ flowchart LR
 | `txn` | Journaled state machine, vault, crash recovery, commit/rollback |
 | `verifier-cli` | Offline `jvd-verify` |
 | `cli` | `jvd` commands |
+| `ui` | Swing desktop app: destroy, evidence JSON, verify, recover, memory self-test |
 | `experiments` | N-trial matrices, CSV, generated `docs/RESULTS.md` |
+
+## Desktop UI
+
+`scripts/jvd-ui.sh` opens a Swing app — **completely Java, no external UI dependency**:
+
+- file picker, work directory, crypto-shred vs overwrite
+- optional raw image + canary hex, grace period, require-checkable
+- Destroy, Verify evidence, Recover, Memory self-test
+- live log tab and signed Evidence JSON tab
+
+![jVerifyDestroy Swing UI](docs/ui.png)
+
+The UI is a thin shell over `AppService`, which calls the same txn/verify/log code as the
+CLI. The backend tests (`AppServiceTest`) cover commit, verify, and rollback.
 
 ## Transaction semantics
 

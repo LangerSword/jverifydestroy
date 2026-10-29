@@ -18,6 +18,7 @@
     <module>txn</module>
     <module>verifier-cli</module>
     <module>cli</module>
+    <module>ui</module>
     <module>experiments</module>
   </modules>
   <properties>
