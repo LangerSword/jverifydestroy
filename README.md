@@ -100,6 +100,9 @@ flowchart LR
 The UI is a thin shell over `AppService`, which calls the same txn/verify/log code as the
 CLI. The backend tests (`AppServiceTest`) cover commit, verify, and rollback.
 
+Scaling: it auto-detects from screen width (1.0–1.7×), opens maximized on Hyprland, and
+accepts an override: `JVD_UI_SCALE=1.4 ./scripts/jvd-ui.sh` or `--scale=1.4`.
+
 ## Transaction semantics
 
 ```
