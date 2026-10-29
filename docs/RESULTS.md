@@ -2,7 +2,7 @@
 
 JDK: 25.0.5+8-LTS  
 OS: Linux 7.2.11-arch1-1  
-Trials per memory cell: 2
+Trials per memory cell: 200
 
 Every memory trial carries a positive control (unwiped canary) and a negative control. An INVALID trial is not a pass. `NOT_CHECKABLE` is not a pass.
 
@@ -10,49 +10,49 @@ Every memory trial carries a positive control (unwiped canary) and a negative co
 
 | collector | mode | valid | target FOUND (false assurance) | rate | Wilson 95% CI | positive control FOUND |
 |---|---|---|---|---|---|---|
-| G1 | HOT | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| G1 | MOVE | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| G1 | WIPE | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| Parallel | HOT | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| Parallel | MOVE | 2 | 2 | 1.000 | [0.342, 1.000] | 1.000 |
-| Parallel | WIPE | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| Serial | HOT | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| Serial | MOVE | 2 | 2 | 1.000 | [0.342, 1.000] | 1.000 |
-| Serial | WIPE | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| Shenandoah | HOT | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| Shenandoah | MOVE | 2 | 2 | 1.000 | [0.342, 1.000] | 1.000 |
-| Shenandoah | WIPE | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| ZGC | HOT | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| ZGC | MOVE | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
-| ZGC | WIPE | 2 | 0 | 0.000 | [0.000, 0.658] | 1.000 |
+| G1 | HOT | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| G1 | MOVE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| G1 | WIPE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| Parallel | HOT | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| Parallel | MOVE | 200 | 200 | 1.000 | [0.981, 1.000] | 1.000 |
+| Parallel | WIPE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| Serial | HOT | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| Serial | MOVE | 200 | 200 | 1.000 | [0.981, 1.000] | 1.000 |
+| Serial | WIPE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| Shenandoah | HOT | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| Shenandoah | MOVE | 200 | 200 | 1.000 | [0.981, 1.000] | 1.000 |
+| Shenandoah | WIPE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| ZGC | HOT | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
+| ZGC | MOVE | 200 | 2 | 0.010 | [0.003, 0.036] | 1.000 |
+| ZGC | WIPE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
 
 ## File matrix
 
 | method | trials | logical result | note |
 |---|---|---|---|
-| crypto | 2 | 2/2 | raw-media residue NOT_CHECKABLE without an image |
-| delete-only | 2 | 2/2 | raw-media residue NOT_CHECKABLE without an image |
-| overwrite | 2 | 2/2 | raw-media residue NOT_CHECKABLE without an image |
+| crypto | 200 | 200/200 | raw-media residue NOT_CHECKABLE without an image |
+| delete-only | 200 | 200/200 | raw-media residue NOT_CHECKABLE without an image |
+| overwrite | 200 | 200/200 | raw-media residue NOT_CHECKABLE without an image |
 
 ## Tamper matrix
 
 | mutation | trials | detected | rate |
 |---|---|---|---|
-| backdate | 2 | 2 | 1.000 |
-| delete | 2 | 2 | 1.000 |
-| edit | 2 | 2 | 1.000 |
-| fork | 2 | 2 | 1.000 |
+| backdate | 200 | 200 | 1.000 |
+| delete | 200 | 200 | 1.000 |
+| edit | 200 | 200 | 1.000 |
+| fork | 200 | 200 | 1.000 |
 
 ## Overhead
 
 | method | size | median ms |
 |---|---|---|
-| overwrite | 1MiB | median of 5; p95=0 |
-| crypto | 1MiB | median of 5; p95=20 |
-| overwrite | 16MiB | median of 5; p95=6 |
-| crypto | 16MiB | median of 5; p95=237 |
-| overwrite | 64MiB | median of 5; p95=19 |
-| crypto | 64MiB | median of 5; p95=84 |
+| overwrite | 1MiB | 0 |
+| crypto | 1MiB | 14 |
+| overwrite | 16MiB | 5 |
+| crypto | 16MiB | 32 |
+| overwrite | 64MiB | 21 |
+| crypto | 64MiB | 78 |
 
 ## Limits
 

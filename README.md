@@ -112,7 +112,9 @@ buffers. Results are `FOUND`, `NOT_FOUND`, or `NOT_CHECKABLE(reason)`. A run wit
 control is `INVALID`, never a pass.
 
 File validation is honest about its limits: path absence and vault/decrypt checks are
-logical; a raw-image canary scan is `NOT_CHECKABLE` unless the caller supplies an image.
+logical; a raw-image canary scan is `NOT_CHECKABLE` unless the caller supplies an image that
+contained the canary **before** destruction. The pre-check is mandatory; an unrelated zero
+image cannot produce a PASS.
 
 ## Evidence and log
 
