@@ -152,7 +152,7 @@ A3 narrows that window; it does not eliminate it.
 | Inclusion/consistency proofs verify for all tested sizes | `MerkleTest` |
 | A known-present control canary is found | `MemoryScannerTest`; `CanaryVerifierTest` |
 | A failed control makes the run INVALID | `CanaryVerifierTest` |
-| Serial/Parallel/Shenandoah can leave a stale copy after a move | `docs/SPIKES.md` H2; `docs/RESULTS.md` |
+| Serial/Parallel/Shenandoah can leave a stale copy after a move; ZGC is rare, G1 was 0/200 | `docs/SPIKES.md` H2; `docs/RESULTS.md` |
 | Default heap dump omits unreachable objects; `-all` includes them | `docs/SPIKES.md` H3 |
 | mlock/MADV_DONTDUMP work through FFM | `NativeLockTest`; `docs/SPIKES.md` H5 |
 | Physical flash is not verified | not a claim; `docs/PLAN.md` threat model |
