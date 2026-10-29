@@ -53,25 +53,27 @@ target bytes. That is H4, not H1.
 
 Probe: `MemProbe` mode `move`: allocate a 4 KiB canary array, keep it live, `System.gc()`
 (forcing a move/promotion), then `Arrays.fill(array, 0)`, drop the reference, `System.gc()`,
-and scan. `hot` is the JIT-hot-loop mode. 10 trials per cell (the 20-trial matrix is running;
-the numbers below are the completed 10-trial runs).
+and scan. `hot` is the JIT-hot-loop mode. 20 trials per cell, completed run
+`proc_74091618828a`:
 
 | Collector | `move` FOUND / valid | `hot` FOUND / valid |
 |---|---|---|
-| Serial | 10 / 10 | 0 / 10 |
-| Parallel | 10 / 10 | 0 / 10 |
-| G1 | 0 / 10 | 0 / 10 |
-| ZGC | 0 / 3 (after fixing the `UseZGCGC` flag; earlier run INVALID) | 0 / 10 |
-| Shenandoah | 10 / 10 | 0 / 10 |
+| Serial | 20 / 20 | 0 / 20 |
+| Parallel | 20 / 20 | 0 / 20 |
+| G1 | 0 / 20 | 0 / 20 |
+| ZGC | 0 / 20 | 0 / 20 |
+| Shenandoah | 20 / 20 | 0 / 20 |
 
-Raw example (`Serial`, one trial):
+Raw example (`Serial`):
 
 ```
 move,Serial,,0,FOUND,FOUND,NOT_FOUND,VALID,1
 move,Serial,,1,FOUND,FOUND,NOT_FOUND,VALID,1
 ...
-SUMMARY,move,Serial,,valid=10,invalid=0,found=10,rate=1.0000
+SUMMARY,move,Serial,,valid=20,invalid=0,found=20,rate=1.0000
 ```
+
+The earlier 10-trial table was consistent with this and is superseded by the 20-trial run.
 
 **Conclusion.** H2 is CONFIRMED for Serial, Parallel, and Shenandoah: a copying collector can
 leave a stale copy of a moved array in from-space; wiping the live reference does not remove

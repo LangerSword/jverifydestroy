@@ -53,6 +53,7 @@ public final class DestructionTransaction {
     private byte[] keyBytes;
     private EvidenceRecord record;
     private FileValidation validation;
+    private boolean rawImagePreFound;
 
     public DestructionTransaction(TxnConfig cfg, KeyPair evidenceKey, LogStore log,
                                   PrivateKey logKey, Witness witness) {
@@ -119,6 +120,12 @@ public final class DestructionTransaction {
         state = State.STAGED;
         journal.append(State.STAGED, detail(Map.of("target", cfg.target().toString(),
                 "method", cfg.method().name(), "size", size)));
+        if (cfg.rawImage() != null && cfg.maskedCanary() != null) {
+            ScanResult pre = FileScanner.scan(cfg.rawImage(), cfg.maskedCanary());
+            rawImagePreFound = pre.found();
+            record.validation.checks.add("raw image pre-check: " + pre.verdict()
+                    + (pre.reason() == null ? "" : " (" + pre.reason() + ")"));
+        }
         crashHook.after(State.STAGED);
 
         Path keys = cfg.workDir().resolve("keys");
@@ -177,15 +184,21 @@ public final class DestructionTransaction {
             checks.add("rollback copy decrypts: PASS");
         }
         if (cfg.rawImage() != null && cfg.maskedCanary() != null) {
-            ScanResult s = FileScanner.scan(cfg.rawImage(), cfg.maskedCanary());
-            checks.add("raw image: " + s.verdict() + (s.reason() == null ? "" : " (" + s.reason() + ")"));
-            if (s.found()) {
-                ok = false;
-                reason = "canary found in raw image";
-            } else if (s.notFound()) {
-                rawCheckable = true;
+            if (!rawImagePreFound) {
+                checks.add("raw image: NOT_CHECKABLE (canary not found in the image before destruction; "
+                        + "the image is not a witness for this file)");
+                reason = "raw image pre-check failed";
             } else {
-                reason = s.reason();
+                ScanResult s = FileScanner.scan(cfg.rawImage(), cfg.maskedCanary());
+                checks.add("raw image: " + s.verdict() + (s.reason() == null ? "" : " (" + s.reason() + ")"));
+                if (s.found()) {
+                    ok = false;
+                    reason = "canary found in raw image";
+                } else if (s.notFound()) {
+                    rawCheckable = true;
+                } else {
+                    reason = s.reason();
+                }
             }
         } else {
             checks.add("raw image: NOT_CHECKABLE (no raw image + canary supplied)");
@@ -230,11 +243,13 @@ public final class DestructionTransaction {
             postChecks.add("path absent: PASS");
         }
         boolean rawCheckable = false;
-        if (cfg.rawImage() != null && cfg.maskedCanary() != null) {
+        if (cfg.rawImage() != null && cfg.maskedCanary() != null && rawImagePreFound) {
             ScanResult s = FileScanner.scan(cfg.rawImage(), cfg.maskedCanary());
             postChecks.add("raw image after commit: " + s.verdict());
             if (s.found()) ok = false;
             else if (s.notFound()) rawCheckable = true;
+        } else if (cfg.rawImage() != null && cfg.maskedCanary() != null) {
+            postChecks.add("raw image after commit: NOT_CHECKABLE (pre-check failed)");
         }
         String postResult = !ok ? "FAIL" : rawCheckable ? "PASS" : "NOT_CHECKABLE";
 
@@ -247,12 +262,15 @@ public final class DestructionTransaction {
         record.validation.checks.addAll(validation.checks());
         record.validation.checks.addAll(postChecks);
         record.validation.reason = "pre-commit: " + validation.result() + "; post-commit: " + postResult;
-        record.validation.positive.detail = "not applicable to file-level transaction";
-        record.validation.negative.detail = "not applicable to file-level transaction";
+        record.validation.positive.applicable = false;
+        record.validation.positive.actual = "NOT_APPLICABLE";
+        record.validation.positive.detail = "file-level transaction uses path/decrypt checks, not canary controls";
+        record.validation.negative.applicable = false;
+        record.validation.negative.actual = "NOT_APPLICABLE";
+        record.validation.negative.detail = "file-level transaction uses path/decrypt checks, not canary controls";
+        // A3 requires an independent process re-validation (the memory verifier). This file
+        // transaction has witness cosigning but no such re-validation, so it stays at its ceiling.
         record.assurance = cfg.method().ceiling();
-        if (cfg.method() == Method.CRYPTO_SHRED && witness != null && "PASS".equals(postResult)) {
-            record.assurance = AssuranceLevel.A3;
-        }
         record.sign(evidenceKey.getPrivate());
         log.append(record);
         Checkpoint cp = log.checkpoint(logKey);
@@ -304,6 +322,12 @@ public final class DestructionTransaction {
         try {
             record.sign(evidenceKey.getPrivate());
             log.append(record);
+            Checkpoint cp = log.checkpoint(logKey);
+            if (witness != null) witness.cosign(cp);
+            Path checkpoints = cfg.workDir().resolve("checkpoints");
+            Files.createDirectories(checkpoints);
+            LogStore.writeCheckpoint(checkpoints.resolve(txnId + ".json"), cp);
+            LogStore.writeCheckpoint(checkpoints.resolve("latest.json"), cp);
         } catch (Exception ignored) {
             // An aborted transaction that cannot log is still aborted; the journal records it.
         }

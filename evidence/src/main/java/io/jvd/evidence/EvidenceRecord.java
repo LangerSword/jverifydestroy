@@ -190,6 +190,7 @@ public final class EvidenceRecord {
         public String expected = "FOUND";
         public String actual = "NOT_RUN";
         public boolean ok;
+        public boolean applicable = true;
         public String detail;
 
         public Control() { this("control"); }
@@ -197,7 +198,10 @@ public final class EvidenceRecord {
         public Control(String name) { this.name = name; }
 
         public Map<String, Object> toMap() {
-            return Json.obj("name", name, "expected", expected, "actual", actual, "ok", ok, "detail", detail);
+            Map<String, Object> m = Json.obj("name", name, "expected", expected, "actual", actual,
+                    "ok", ok, "detail", detail);
+            if (!applicable) m.put("applicable", false);
+            return m;
         }
 
         public static Control fromMap(Map<String, Object> m) {
@@ -205,6 +209,7 @@ public final class EvidenceRecord {
             c.expected = str(m, "expected", "FOUND");
             c.actual = str(m, "actual", "NOT_RUN");
             c.ok = Json.asBool(m.getOrDefault("ok", false));
+            c.applicable = Json.asBool(m.getOrDefault("applicable", true));
             c.detail = str(m, "detail", null);
             return c;
         }

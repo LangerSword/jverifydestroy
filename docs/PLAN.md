@@ -115,7 +115,7 @@ Rules:
 |---|---|
 | A0 | Deletion only. No overwrite, no validation. |
 | A1 | Best-effort overwrite + logical checks (path absent, file readable as zeros). No raw-media validation. “Physical media NOT verified.” |
-| A2 | Crypto-shred committed, key destroyed, decrypt fails, positive and negative controls valid. Logical level only. |
+| A2 | Crypto-shred committed, key destroyed, decrypt fails, required checks pass. Canary controls are required for memory subjects and marked N/A for file-level transactions. Logical level only. |
 | A3 | A2 + witness-cosigned checkpoint + parent-process re-validation of a separate victim JVM + offline verifier passes. |
 
 Every level carries the same residual-risk line: user-space Java cannot verify the SSD flash
@@ -144,7 +144,9 @@ chunk. It never scans its own process. Results:
 A run with a failed positive or negative control is `INVALID`, not `PASS`.
 
 File validation uses `FileScanner` on a caller-supplied raw image (for example an ext4 image
-or a loop device file). Without an image, the result is `NOT_CHECKABLE("no raw image supplied")`.
+or a loop device file). The image is pre-scanned before destruction; if the canary is not
+found there, the image is not a witness for this file and the result is `NOT_CHECKABLE`.
+Without an image, the result is `NOT_CHECKABLE("no raw image supplied")`.
 The tool never pretends that reading a path back is a raw-media check.
 
 ## 7. Evidence and log
@@ -263,6 +265,7 @@ Integration:
 | Log key and witness key on the same disk | Operator can rewrite both | Document; A3 requires the verifier to hold an old checkpoint; future: remote witness |
 | Vault plaintext copy during rollback | Confidentiality exposure if the vault key leaks | Vault is AES-GCM under a 0600 key file; delete both at COMMIT; threat model says so |
 | Crypto-shred key file copied before commit | Key can decrypt the ciphertext later | Key file is 0600; commit overwrites then deletes; backups are out of scope |
+| Crash between destroying the key/vault and journaling COMMITTED | Recovery cannot restore, and it must not claim it did | Recovery reports restore failure and ABORTED; the narrow window is documented as a residual risk, not hidden |
 | Patent prior art (Microsoft US20260030390A1, US20260228352A1) | Novelty/claims risk | Do not claim “attestable secure erase” or “immutable proof-of-erasure”; cite prior art; focus on measurement |
 | Scope creep | Student team cannot finish | Cut features, not verification quality; no GUI, no network, no blockchain |
 

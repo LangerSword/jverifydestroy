@@ -8,7 +8,7 @@ package io.jvd.evidence;
 public enum AssuranceLevel {
     A0("deletion only; no overwrite, no validation"),
     A1("best-effort overwrite; logical checks only; physical media NOT verified"),
-    A2("crypto-shred committed; decrypt fails; controls valid; logical level only"),
+    A2("crypto-shred committed; key destroyed and decrypt fails; required checks pass; logical level only (canary controls apply only to memory subjects)"),
     A3("A2 plus witness-cosigned checkpoint and independent process re-validation; logical level only");
 
     private final String description;
