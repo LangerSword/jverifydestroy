@@ -36,6 +36,7 @@ scripts/jvd.sh shred ./secret.txt --work .jvd-work
 # The file is gone. We couldn't check the physical disk, so this is a software-level result.
 
 scripts/jvd.sh shred ./secret.txt --work .jvd-work --details  # technical facts
+scripts/jvd.sh explain --work .jvd-work                      # last evidence record
 scripts/jvd.sh verify --work .jvd-work
 # VALID size=... root=...
 ```
@@ -62,6 +63,9 @@ flowchart LR
   CLI[jvd CLI] --> MEM[destroy-memory]
   CLI --> FILE[destroy-file]
   CLI --> TXN[txn]
+  CLI --> PRES[presenter]
+  UI --> PRES
+  TXN --> PRES
   TXN --> FILE
   TXN --> VER[verify]
   TXN --> EV[evidence]

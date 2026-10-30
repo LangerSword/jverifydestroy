@@ -83,8 +83,8 @@ public final class MainFrame extends JFrame {
         testBtn.setToolTipText("Run one control-validated memory wipe and scan a child JVM");
 
         logPane.append("Ready. Select a file and a work directory, then Destroy.");
-        logPane.append("The work directory holds keys, journal, vault, and checkpoints.");
-        logPane.append("A COMMITTED transaction cannot be restored; that is the guarantee.");
+        logPane.append("The app keeps its own recovery files in this folder.");
+        logPane.append("Once the final step is done, the file cannot be brought back.");
     }
 
     public void setSplitFraction(double fraction) {
@@ -382,6 +382,10 @@ public final class MainFrame extends JFrame {
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Destroy " + target.getFileName() + "?\nThe final step cannot be undone.",
+                "Confirm destruction", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) return;
         runAsync("Destroying " + target.getFileName() + "…",
                 () -> AppService.destroy(target, method, work, image, canary, grace, require),
                 v -> {
@@ -405,9 +409,8 @@ public final class MainFrame extends JFrame {
             stateMetric.setText(v.valid() ? "VERIFIED" : "INVALID");
             validationMetric.setText(v.valid() ? "SIGNATURES OK" : "TAMPER");
             controlsMetric.setText(v.valid() ? "CHAIN OK" : "FAILED");
-            logPane.append("verify: " + v.summary());
-            for (String e : v.errors()) logPane.append("  error: " + e);
-            if (!v.valid()) setStatus("Verification FAILED", Theme.RED);
+            logPane.append(v.valid() ? "The receipt checks out." : "The receipt did not check out.");
+            if (!v.valid()) setStatus("Receipt check failed", Theme.RED);
         });
     }
 
@@ -425,8 +428,8 @@ public final class MainFrame extends JFrame {
             assuranceMetric.setText("—");
             controlsMetric.setText(v.checks().stream()
                     .anyMatch(x -> x.startsWith("positive control: FOUND")) ? "VALID" : "INVALID");
-            logPane.append("memory self-test: " + v.result());
-            for (String check : v.checks()) logPane.append("  " + check);
+            logPane.append("PASS".equals(v.result())
+                    ? "The memory check passed." : "The memory check could not confirm the result.");
         });
     }
 

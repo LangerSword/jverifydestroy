@@ -41,7 +41,7 @@ results**, not any single mechanism.
    plus a measured false-assurance rate. This is the strongest defensible contribution.
 2. **A measured Java leak matrix.** The H2 result is concrete: after `System.gc()` moves a
    live canary array and the live reference is wiped, the canary was still found **20/20**
-   on Serial, Parallel, and Shenandoah; **0/20** on G1 and ZGC. The H1/H3/H4 probes add the
+   on Serial, Parallel, and Shenandoah; **0/200** on G1 and **1/200** on ZGC. The H1/H3/H4 probes add the
    scanner-buffer and heap-dump traps. This is measurement, not a new primitive.
 3. **A journaled commit/rollback file-destruction transaction.** `gdpr-shredding` couples
    key destruction and proof in one transaction, and its paid edition advertises a grace

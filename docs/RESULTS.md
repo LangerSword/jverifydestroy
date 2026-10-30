@@ -23,7 +23,7 @@ Every memory trial carries a positive control (unwiped canary) and a negative co
 | Shenandoah | MOVE | 200 | 200 | 1.000 | [0.981, 1.000] | 1.000 |
 | Shenandoah | WIPE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
 | ZGC | HOT | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
-| ZGC | MOVE | 200 | 2 | 0.010 | [0.003, 0.036] | 1.000 |
+| ZGC | MOVE | 200 | 1 | 0.005 | [0.001, 0.028] | 1.000 |
 | ZGC | WIPE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
 
 ## File matrix
@@ -48,11 +48,11 @@ Every memory trial carries a positive control (unwiped canary) and a negative co
 | method | size | median ms |
 |---|---|---|
 | overwrite | 1MiB | 0 |
-| crypto | 1MiB | 14 |
-| overwrite | 16MiB | 5 |
-| crypto | 16MiB | 32 |
-| overwrite | 64MiB | 21 |
-| crypto | 64MiB | 78 |
+| crypto | 1MiB | 15 |
+| overwrite | 16MiB | 4 |
+| crypto | 16MiB | 229 |
+| overwrite | 64MiB | 18 |
+| crypto | 64MiB | 231 |
 
 ## Limits
 

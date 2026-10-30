@@ -88,7 +88,7 @@ Detects edited, deleted, backdated, truncated, forked logs relative to a trusted
 - `mvn -q verify`: 57 tests, 0 failures/errors/skips.
 - 200 trials/cell, JDK 25.0.5+8:
   - Serial/Parallel/Shenandoah `MOVE`: 200/200 target FOUND (false assurance).
-  - G1 `MOVE`: 0/200; ZGC `MOVE`: 2/200 (1.0%, Wilson CI 0.3–3.6%).
+  - G1 `MOVE`: 0/200; ZGC `MOVE`: 1/200 (0.5%, Wilson CI 0.1–2.8%).
   - WIPE/HOT: 0/200 on every collector.
   - Tamper: edit/delete/backdate/fork 200/200 detected.
   - File matrix: logical checks 200/200; raw-media residue `NOT_CHECKABLE` without an image.

@@ -119,7 +119,7 @@ to treat the risk as real.
 cd ~/projects/jverifydestroy
 export JAVA_HOME=$HOME/tools/jdk-25.0.5+8
 export PATH=$JAVA_HOME/bin:$HOME/tools/apache-maven-3.9.16/bin:$PATH
-mvn -q -pl txn -am test -Dtest=FindingReproTest
+mvn -q -pl txn -am test -Dtest=FindingReproTest -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
 The four tests fail on the current commit. They are the Phase 0 evidence; the P1/P2/P6/P8

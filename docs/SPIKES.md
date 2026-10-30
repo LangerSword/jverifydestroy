@@ -65,7 +65,7 @@ and scan. `hot` is the JIT-hot-loop mode. 20 trials per cell, completed run
 | Shenandoah | 20 / 20 | 0 / 20 |
 
 The 200-trial matrix (`docs/RESULTS.md`) reproduced Serial/Parallel/Shenandoah at
-200/200 and found **ZGC 2/200 (1.0%, Wilson 95% CI 0.3%–3.6%)**, not 0. G1 was 0/200.
+200/200 and found **ZGC 1/200 (0.5%, Wilson 95% CI 0.1%–2.8%)**, not 0. G1 was 0/200.
 The 20-trial ZGC cell was 0/20; the larger run shows the rare case. Do not describe ZGC
 as safe; describe it as low-rate in this test.
 
@@ -82,7 +82,7 @@ The earlier 10-trial table was consistent with this and is superseded by the 20-
 
 **Conclusion.** H2 is CONFIRMED for Serial, Parallel, and Shenandoah: a copying collector can
 leave a stale copy of a moved array in from-space; wiping the live reference does not remove
-it. G1 did not exhibit it in 200 trials; ZGC did in 2/200. The result is collector-dependent
+it. G1 did not exhibit it in 200 trials; ZGC did in 1/200 in the latest run. The result is collector-dependent
 and must be measured, not assumed. This is the strongest argument for the verifier: “wiped”
 is a claim about a reference, not about the process’s memory.
 

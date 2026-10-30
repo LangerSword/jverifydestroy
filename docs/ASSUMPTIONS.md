@@ -33,3 +33,7 @@ wrong, the code or the docs must be changed, not quietly ignored.
 | A26 | The file destroyer writes patterns through a `FileChannel` at absolute positions, calls `force(true)`, then deletes. It does not attempt `fallocate`, `ioctl`, or TRIM. | JDK-only and portable; those operations need native/privileged access. |
 | A27 | A crash between the last journal write and the side effect is treated as “state not reached”; recovery re-does or rolls back from the last journaled state. | Standard write-ahead ordering: journal first, then act. |
 | A28 | `COMMITTED` is irreversible. The code path that deletes the vault/key has no inverse, and the CLI refuses `restore` after COMMIT. | The brief’s hard rule; also the security property. |
+
+| A29 | A commit writes a signed `INTENT` evidence record and checkpoint before destroying the key/vault, then a `CONFIRMED` record with the same `eventId`. | Makes the irreversible step recoverable/auditable; an `INTENT` without resolution is `UNRESOLVED`. |
+| A30 | New crypto containers use JVD2: 1 MiB independently authenticated GCM chunks, a unique nonce prefix+counter, and AAD binding chunk index/final flag. JVD1 remains readable but is not created. | SunJCE buffers all GCM decryption output until `doFinal`; chunking avoids the heap limit. |
+| A31 | A failed restore keeps the vault and key and records `RESTORE_FAILED`; a post-check failure records `UNRESOLVED`, never `COMMITTED`. | Losing the only recovery copy or claiming a false commit is worse than reporting an uncertain state. |

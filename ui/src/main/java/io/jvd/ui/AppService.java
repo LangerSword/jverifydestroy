@@ -30,7 +30,7 @@ public final class AppService {
 
     public record VerifyView(boolean valid, String summary, List<String> errors) {}
 
-    public record RecoverView(List<String> lines) {}
+    public record RecoverView(List<String> lines, List<String> details) {}
 
     public record SelfTestView(String result, List<String> checks) {}
 
@@ -85,12 +85,23 @@ public final class AppService {
 
     public static RecoverView recover(Path work) throws Exception {
         List<String> lines = new ArrayList<>();
+        List<String> details = new ArrayList<>();
         for (Recovery.Result r : Recovery.recover(work.toAbsolutePath().normalize())) {
-            lines.add(r.txnId() + "  last=" + r.lastState() + "  action=" + r.action()
+            details.add(r.txnId() + "  last=" + r.lastState() + "  action=" + r.action()
                     + "  restored=" + r.restored() + (r.detail().isBlank() ? "" : "  " + r.detail()));
+            if (r.restored()) {
+                lines.add("The file was put back.");
+            } else if (r.lastState() == io.jvd.txn.State.COMMITTED) {
+                lines.add("This file was already finalized; it was not put back.");
+            } else if (r.lastState() == io.jvd.txn.State.RESTORE_FAILED) {
+                lines.add("The file could not be put back. The recovery copy is still available.");
+            } else {
+                lines.add("Recovery needs attention. Open the technical view for details.");
+            }
         }
-        if (lines.isEmpty()) lines.add("nothing to recover under " + work.toAbsolutePath());
-        return new RecoverView(lines);
+        if (lines.isEmpty()) lines.add("There is nothing to recover.");
+        if (details.isEmpty()) details.add("nothing to recover under " + work.toAbsolutePath());
+        return new RecoverView(lines, details);
     }
 
     public static SelfTestView selfTest() {

@@ -35,6 +35,7 @@ public final class Main {
                 case "txn" -> txn(args, false);
                 case "verify" -> verify(args);
                 case "recover" -> recover(args);
+                case "explain" -> explain(args);
                 case "selftest" -> selftest();
                 default -> usage();
             };
@@ -54,6 +55,7 @@ public final class Main {
                              [--canary HEX] [--grace MS] [--require-checkable] [--details]
                   verify [--work DIR]
                   recover [--work DIR]
+                  explain [--work DIR]
                   selftest
                 """);
         return 2;
@@ -136,6 +138,34 @@ public final class Main {
             System.out.println("detail=" + out.detail());
         }
         return out.state() == State.COMMITTED ? 0 : 1;
+    }
+
+    private static int explain(String[] args) throws Exception {
+        Opts o = Opts.parse(args);
+        Path work = Path.of(o.val("--work", ".jvd-work")).toAbsolutePath();
+        Path logFile = work.resolve("log").resolve("log.jsonl");
+        if (!Files.exists(logFile)) {
+            System.err.println("no log under " + work);
+            return 2;
+        }
+        var lines = Files.readAllLines(logFile);
+        if (lines.isEmpty()) {
+            System.err.println("empty log under " + work);
+            return 2;
+        }
+        var line = io.jvd.evidence.Json.parseObject(lines.get(lines.size() - 1));
+        @SuppressWarnings("unchecked")
+        var recordMap = (java.util.Map<String, Object>) line.get("record");
+        var r = io.jvd.evidence.EvidenceRecord.fromJson(io.jvd.evidence.Json.write(recordMap));
+        System.out.println("event=" + r.eventType + " id=" + r.eventId);
+        System.out.println("method=" + r.method + " technique=" + r.technique);
+        System.out.println("operation=" + r.verification.status + " completed=" + r.verification.operationCompleted);
+        System.out.println("validation=" + r.validation.result + " dataAbsent=" + r.validation.dataAbsent);
+        System.out.println("assurance=" + r.assurance + " (" + r.assurance.description() + ")");
+        System.out.println("residualRisk=" + r.residualRisk);
+        System.out.println();
+        System.out.println(r.toJson());
+        return 0;
     }
 
     private static int verify(String[] args) throws Exception {

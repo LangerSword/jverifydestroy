@@ -26,7 +26,7 @@ class AppServiceTest {
 
         AppService.RecoverView recover = AppService.recover(work);
         assertFalse(recover.lines().isEmpty());
-        assertTrue(recover.lines().get(0).contains("last=COMMITTED"));
+        assertTrue(recover.details().get(0).contains("last=COMMITTED"));
     }
 
     @Test void requireCheckableRollsBack(@TempDir Path dir) throws Exception {

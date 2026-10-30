@@ -286,7 +286,7 @@ Integration:
 5. **Positive and negative controls are mandatory on every run.** A control failure makes the
    run INVALID; this is enforced in `CanaryVerifier`, not left to the caller.
 6. **Collector-specific results are reported, not averaged.** H2 found stale copies on Serial,
-   Parallel, and Shenandoah, but not on G1 or ZGC. The experiments report per collector and
+   Parallel, and Shenandoah, but not on G1; ZGC showed 1/200 in the latest run, so it is not “safe” either. The experiments report per collector and
    never claim “Java GCs leak” in general.
 7. **FILE_OVERWRITE validation is NOT_CHECKABLE without a raw image.** The tool does not treat
    “path absent” as proof of raw-media erasure. The report’s “failed verification → rollback”
