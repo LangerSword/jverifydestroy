@@ -12,6 +12,7 @@
   <modules>
     <module>evidence</module>
     <module>log</module>
+    <module>presenter</module>
     <module>destroy-memory</module>
     <module>destroy-file</module>
     <module>verify</module>

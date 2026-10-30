@@ -37,6 +37,14 @@ public final class Recovery {
         State last = journal.lastState();
         if (last == null) return new Result(txnId, null, "empty journal", false, "");
         if (last == State.ABORTED) return new Result(txnId, last, "already aborted", false, "");
+        if (last == State.RESTORE_FAILED) {
+            return new Result(txnId, last, "restore previously failed; recovery material kept", false,
+                    "fix permissions/space and retry; do not delete the work directory");
+        }
+        if (last == State.UNRESOLVED) {
+            return new Result(txnId, last, "unresolved; no automatic restore or commit", false,
+                    "inspect the journal and log; do not claim destroyed");
+        }
         if (last == State.COMMITTED) {
             return new Result(txnId, last, "committed; no restore attempted", false,
                     "COMMITTED is irreversible by design");
@@ -48,6 +56,41 @@ public final class Recovery {
         String target = str(vaultDetail, "target");
         String payload = str(vaultDetail, "payload");
         String keyFile = str(vaultDetail, "keyFile");
+
+        if (last == State.COMMITTING) {
+            boolean havePayload = payload != null && Files.exists(Path.of(payload));
+            boolean haveKey = keyFile != null && Files.exists(Path.of(keyFile));
+            if (havePayload && haveKey) {
+                boolean restored = false;
+                String detail = "";
+                try {
+                    byte[] key = FileKeyVault.read(Path.of(keyFile));
+                    Path tmp = Path.of(target).resolveSibling(Path.of(target).getFileName() + ".restore-" + txnId);
+                    CryptoShredder.decrypt(Path.of(payload), tmp, key);
+                    Files.move(tmp, Path.of(target), StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE);
+                    Arrays.fill(key, (byte) 0);
+                    restored = true;
+                    detail = "restored from COMMITTING intent";
+                } catch (Exception e) {
+                    detail = "restore failed: " + e.getMessage();
+                }
+                if (restored) {
+                    deleteQuietly(payload);
+                    deleteQuietly(keyFile);
+                    journal.append(State.ABORTED, Map.of("reason", "recovered from COMMITTING",
+                            "restored", true, "detail", detail));
+                    return new Result(txnId, last, "restored before COMMIT", true, detail);
+                }
+                journal.append(State.RESTORE_FAILED, Map.of("reason", "recovered from COMMITTING",
+                        "restored", false, "detail", detail));
+                return new Result(txnId, last, "restore failed; recovery material kept", false, detail);
+            }
+            journal.append(State.UNRESOLVED, Map.of("reason", "COMMITTING without key/payload",
+                    "restored", false));
+            return new Result(txnId, last, "unresolved: key/payload missing after COMMITTING", false,
+                    "cannot restore and cannot claim COMMITTED");
+        }
 
         if (last == State.STAGED) {
             deleteQuietly(payload);
@@ -86,12 +129,22 @@ public final class Recovery {
         } else {
             detail = "restore material missing";
         }
-        deleteQuietly(payload);
-        deleteQuietly(keyFile);
-        journal.append(State.ABORTED, Map.of("reason", "recovered from " + last,
-                "restored", restored, "detail", detail));
-        return new Result(txnId, last, restored ? "restored before COMMIT" : "aborted; restore failed",
-                restored, detail);
+        if (restored) {
+            deleteQuietly(payload);
+            deleteQuietly(keyFile);
+            journal.append(State.ABORTED, Map.of("reason", "recovered from " + last,
+                    "restored", true, "detail", detail));
+            return new Result(txnId, last, "restored before COMMIT", true, detail);
+        }
+        if (payload != null && keyFile != null
+                && (Files.exists(Path.of(payload)) || Files.exists(Path.of(keyFile)))) {
+            journal.append(State.RESTORE_FAILED, Map.of("reason", "recovered from " + last,
+                    "restored", false, "detail", detail));
+            return new Result(txnId, last, "restore failed; recovery material kept", false, detail);
+        }
+        journal.append(State.UNRESOLVED, Map.of("reason", "recovered from " + last,
+                "restored", false, "detail", detail));
+        return new Result(txnId, last, "restore material missing; unresolved", false, detail);
     }
 
     private static String str(Map<String, Object> m, String k) {

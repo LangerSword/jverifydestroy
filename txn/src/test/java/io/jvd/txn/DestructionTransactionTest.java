@@ -78,6 +78,24 @@ class DestructionTransactionTest {
                 || out.record().validation.result.contains("NOT_CHECKABLE"));
     }
 
+    @Test void commitWritesIntentAndConfirmed(@TempDir Path dir) throws Exception {
+        Ctx c = ctx(dir);
+        Path target = dir.resolve("secret.txt");
+        Files.writeString(target, "intent");
+        DestructionTransaction t = txn(c, target, Method.CRYPTO_SHRED, false);
+        t.run();
+        var parsed = LogVerifier.parse(c.log().logFile());
+        java.util.List<String> types = new java.util.ArrayList<>();
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        for (var rec : parsed.records) {
+            types.add(String.valueOf(rec.getOrDefault("eventType", "RECORD")));
+            ids.add(String.valueOf(rec.getOrDefault("eventId", "")));
+        }
+        assertTrue(types.contains("INTENT"), types.toString());
+        assertTrue(types.contains("CONFIRMED"), types.toString());
+        assertEquals(ids.get(0), ids.get(ids.size() - 1), "INTENT and CONFIRMED share eventId");
+    }
+
     @Test void commitIsIrreversible(@TempDir Path dir) throws Exception {
         Ctx c = ctx(dir);
         Path target = dir.resolve("secret.txt");

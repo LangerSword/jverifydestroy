@@ -16,6 +16,7 @@ import java.util.*;
  */
 public final class EvidenceRecord {
     public String schemaVersion = "1";
+    public String eventType = "RECORD"; // RECORD, INTENT, CONFIRMED, ABORTED, RESTORE_FAILED, UNRESOLVED
     public String eventId = UUID.randomUUID().toString();
     public String timestamp = Instant.now().toString();
     public String subjectHash;
@@ -63,6 +64,7 @@ public final class EvidenceRecord {
     public Map<String, Object> toMap(boolean withSignature) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("schemaVersion", schemaVersion);
+        if (!"RECORD".equals(eventType)) m.put("eventType", eventType);
         m.put("eventId", eventId);
         m.put("timestamp", timestamp);
         m.put("subjectHash", subjectHash);
@@ -110,6 +112,7 @@ public final class EvidenceRecord {
         Map<String, Object> m = Json.parseObject(text);
         EvidenceRecord r = new EvidenceRecord();
         r.schemaVersion = str(m, "schemaVersion", "1");
+        r.eventType = str(m, "eventType", "RECORD");
         r.eventId = str(m, "eventId", null);
         r.timestamp = str(m, "timestamp", null);
         r.subjectHash = str(m, "subjectHash", null);

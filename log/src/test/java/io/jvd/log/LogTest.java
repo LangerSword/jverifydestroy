@@ -38,7 +38,7 @@ class LogTest {
 
     private Checkpoint signedCheckpoint(LogStore store) {
         Checkpoint cp = store.checkpoint(logKey.getPrivate());
-        new Witness("w1", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(cp);
+        new Witness("w1", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(cp, store);
         return cp;
     }
 
@@ -108,7 +108,8 @@ class LogTest {
         LogStore store = build(dir, 3);
         Checkpoint cp = signedCheckpoint(store);
         Checkpoint forged = Checkpoint.create("jvd.local/test", 3, new byte[32], logKey.getPrivate());
-        new Witness("w1", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(forged);
+        assertThrows(IllegalArgumentException.class, () ->
+                new Witness("w1", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(forged, store));
         assertTrue(LogVerifier.isFork(cp, forged));
         LogVerifier.Result r = LogVerifier.verify(store.logFile(), forged, logKey.getPublic(), witnessKey.getPublic());
         assertFalse(r.valid);
@@ -133,6 +134,20 @@ class LogTest {
         LogVerifier.Result truncated = LogVerifier.verifyConsistency(store.logFile(), old, newer,
                 logKey.getPublic(), witnessKey.getPublic());
         assertFalse(truncated.valid);
+    }
+
+    @Test void intentWithoutConfirmationIsUnresolved(@TempDir Path dir) throws Exception {
+        LogStore store = new LogStore(dir, "jvd.local/test");
+        EvidenceRecord r = EvidenceRecord.create("/tmp/x", "CLEAR", "OVERWRITE");
+        r.eventType = "INTENT";
+        r.verification.status = "COMMITTING";
+        r.sign(evidence.getPrivate());
+        store.append(r);
+        Checkpoint cp = signedCheckpoint(store);
+        LogVerifier.Result result = LogVerifier.verify(store.logFile(), cp,
+                logKey.getPublic(), witnessKey.getPublic());
+        assertFalse(result.valid);
+        assertTrue(result.errors.stream().anyMatch(e -> e.contains("UNRESOLVED")), result.summary());
     }
 
     @Test void missingWitnessIsRejectedWhenWitnessKeySupplied(@TempDir Path dir) throws Exception {

@@ -25,7 +25,7 @@ class Kill9RecoveryTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"STAGED", "VAULTED", "SCRUBBED", "VALIDATED", "COMMITTED"})
+    @ValueSource(strings = {"STAGED", "VAULTED", "SCRUBBED", "VALIDATED", "COMMITTING", "COMMITTED"})
     void killAtEveryStateRecoversHonestly(String state, @TempDir Path dir) throws Exception {
         Path target = dir.resolve("secret.txt");
         Path work = dir.resolve("work");

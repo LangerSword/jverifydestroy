@@ -36,5 +36,10 @@
       <artifactId>txn</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>io.jvd</groupId>
+      <artifactId>presenter</artifactId>
+      <version>${project.version}</version>
+    </dependency>
   </dependencies>
 </project>

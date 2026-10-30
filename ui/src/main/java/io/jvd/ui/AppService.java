@@ -7,6 +7,8 @@ import io.jvd.log.LogStore;
 import io.jvd.log.LogVerifier;
 import io.jvd.log.Witness;
 import io.jvd.txn.*;
+import io.jvd.presenter.Presenter;
+import io.jvd.presenter.UserMessage;
 import io.jvd.verify.Canary;
 import io.jvd.verify.CanaryVerifier;
 import io.jvd.verify.Mode;
@@ -24,7 +26,7 @@ import java.util.List;
 public final class AppService {
     public record DestroyView(String state, String validation, boolean dataAbsent, boolean restored,
                               String assurance, List<String> checks, String journal, String checkpoint,
-                              String evidenceJson, String detail) {}
+                              String evidenceJson, String detail, UserMessage message) {}
 
     public record VerifyView(boolean valid, String summary, List<String> errors) {}
 
@@ -60,7 +62,8 @@ public final class AppService {
                     out.validation() == null ? List.of() : out.validation().checks(),
                     txn.journalFile() == null ? "" : txn.journalFile().toString(),
                     workAbs.resolve("checkpoints").resolve("latest.json").toString(),
-                    evidence, out.detail());
+                    evidence, out.detail(),
+                    Presenter.present(ResultMapper.toResult(out)));
         } finally {
             if (masked != null) Arrays.fill(masked, (byte) 0);
         }

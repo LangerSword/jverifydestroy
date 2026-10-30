@@ -221,6 +221,36 @@ public final class DestructionTransaction {
         if ("NOT_CHECKABLE".equals(validation.result()) && !cfg.allowLogicalOnly()) {
             throw new IllegalStateException("cannot commit NOT_CHECKABLE under requireCheckable");
         }
+        // Never destroy the rollback material if the target reappeared (e.g. a concurrent
+        // recover restored it during the grace window).
+        if (Files.exists(cfg.target())) {
+            return rollback("target reappeared before COMMIT; refusing to commit");
+        }
+
+        // Durable intent before the irreversible step. The intent is a signed evidence record
+        // with the same eventId as the eventual CONFIRMED/ABORTED record.
+        state = State.COMMITTING;
+        record.verification.operationCompleted = false;
+        record.verification.status = "COMMITTING";
+        EvidenceRecord intent = EvidenceRecord.fromJson(record.toJson());
+        intent.eventType = "INTENT";
+        intent.verification.operationCompleted = false;
+        intent.verification.status = "COMMITTING";
+        intent.validation.result = "NOT_RUN";
+        intent.assurance = AssuranceLevel.A0;
+        intent.sign(evidenceKey.getPrivate());
+        log.append(intent);
+        Checkpoint intentCheckpoint = log.checkpoint(logKey);
+        if (witness != null) witness.cosign(intentCheckpoint, log);
+        Path intentCheckpoints = cfg.workDir().resolve("checkpoints");
+        Files.createDirectories(intentCheckpoints);
+        LogStore.writeCheckpoint(intentCheckpoints.resolve(txnId + ".json"), intentCheckpoint);
+        LogStore.writeCheckpoint(intentCheckpoints.resolve("latest.json"), intentCheckpoint);
+        journal.append(State.COMMITTING, detail(Map.of("eventId", record.eventId,
+                "target", cfg.target().toString(), "payload", payload == null ? "" : payload.toString(),
+                "keyFile", keyFile == null ? "" : keyFile.toString(),
+                "checkpoint", intentCheckpoint.toJson())));
+        crashHook.after(State.COMMITTING);
 
         List<String> postChecks = new ArrayList<>();
         boolean ok = true;
@@ -253,6 +283,39 @@ public final class DestructionTransaction {
         }
         String postResult = !ok ? "FAIL" : rawCheckable ? "PASS" : "NOT_CHECKABLE";
 
+        if (!ok) {
+            state = State.UNRESOLVED;
+            record.verification.operationCompleted = false;
+            record.verification.status = "UNRESOLVED";
+            record.verification.notes.add("journal=" + journal.file());
+            record.validation.result = "FAIL";
+            record.validation.dataAbsent = false;
+            record.validation.checks.addAll(validation.checks());
+            record.validation.checks.addAll(postChecks);
+            record.validation.reason = "post-checks failed; no COMMITTED claim";
+            record.validation.positive.applicable = false;
+            record.validation.positive.actual = "NOT_APPLICABLE";
+            record.validation.positive.detail = "file-level transaction uses path/decrypt checks, not canary controls";
+            record.validation.negative.applicable = false;
+            record.validation.negative.actual = "NOT_APPLICABLE";
+            record.validation.negative.detail = "file-level transaction uses path/decrypt checks, not canary controls";
+            record.eventType = "UNRESOLVED";
+            record.assurance = AssuranceLevel.A0;
+            record.sign(evidenceKey.getPrivate());
+            log.append(record);
+            Checkpoint cp = log.checkpoint(logKey);
+            if (witness != null) witness.cosign(cp, log);
+            Path checkpoints = cfg.workDir().resolve("checkpoints");
+            Files.createDirectories(checkpoints);
+            LogStore.writeCheckpoint(checkpoints.resolve(txnId + ".json"), cp);
+            LogStore.writeCheckpoint(checkpoints.resolve("latest.json"), cp);
+            journal.append(State.UNRESOLVED, detail(Map.of("result", "FAIL",
+                    "checks", postChecks, "checkpoint", cp.toJson())));
+            crashHook.after(State.UNRESOLVED);
+            return new Outcome(txnId, state, validation, record, false,
+                    "UNRESOLVED: post-checks failed; no COMMITTED claim");
+        }
+
         state = State.COMMITTED;
         record.verification.operationCompleted = true;
         record.verification.status = "COMMITTED";
@@ -268,13 +331,12 @@ public final class DestructionTransaction {
         record.validation.negative.applicable = false;
         record.validation.negative.actual = "NOT_APPLICABLE";
         record.validation.negative.detail = "file-level transaction uses path/decrypt checks, not canary controls";
-        // A3 requires an independent process re-validation (the memory verifier). This file
-        // transaction has witness cosigning but no such re-validation, so it stays at its ceiling.
-        record.assurance = cfg.method().ceiling();
+        record.eventType = "CONFIRMED";
+        record.assurance = derivedAssurance(true);
         record.sign(evidenceKey.getPrivate());
         log.append(record);
         Checkpoint cp = log.checkpoint(logKey);
-        if (witness != null) witness.cosign(cp);
+        if (witness != null) witness.cosign(cp, log);
         Path checkpoints = cfg.workDir().resolve("checkpoints");
         Files.createDirectories(checkpoints);
         LogStore.writeCheckpoint(checkpoints.resolve(txnId + ".json"), cp);
@@ -287,12 +349,21 @@ public final class DestructionTransaction {
                 "COMMITTED: no restore is possible after this point");
     }
 
+    private AssuranceLevel derivedAssurance(boolean ok) {
+        if (!ok) return AssuranceLevel.A0;
+        return switch (cfg.method()) {
+            case CRYPTO_SHRED -> AssuranceLevel.A2;
+            case OVERWRITE -> AssuranceLevel.A1;
+        };
+    }
+
     public Outcome rollback(String reason) throws IOException {
         if (state == State.COMMITTED) throw new IllegalStateException("cannot roll back after COMMIT");
         if (state == State.ABORTED) return new Outcome(txnId, state, validation, record, false, reason);
+        boolean hadMaterial = payload != null && keyBytes != null && Files.exists(payload);
         boolean restored = false;
         String detailText = reason;
-        if (payload != null && keyBytes != null && Files.exists(payload)) {
+        if (hadMaterial) {
             Path tmp = cfg.target().resolveSibling(cfg.target().getFileName() + ".restore-" + txnId);
             try {
                 CryptoShredder.decrypt(payload, tmp, keyBytes);
@@ -303,13 +374,37 @@ public final class DestructionTransaction {
                 detailText += "; restore failed: " + e.getMessage();
                 Files.deleteIfExists(tmp);
             }
+        } else if (Files.exists(cfg.target())) {
+            detailText += "; target already exists (external recovery); nothing to restore";
+        } else {
+            detailText += "; no restore material";
         }
+
+        if (hadMaterial && !restored) {
+            // Do not delete the only copy. The user can retry after fixing permissions/space.
+            state = State.RESTORE_FAILED;
+            record.verification.operationCompleted = false;
+            record.eventType = "RESTORE_FAILED";
+            record.verification.status = "RESTORE_FAILED";
+            record.validation.result = "RESTORE_FAILED";
+            record.validation.dataAbsent = false;
+            record.validation.reason = detailText;
+            record.validation.checks.add("rollback requested: " + reason);
+            record.validation.checks.add("restored: false; recovery material kept");
+            record.assurance = AssuranceLevel.A0;
+            journal.append(State.RESTORE_FAILED, detail(Map.of("reason", detailText,
+                    "restored", false, "kept", true)));
+            appendEvidenceQuietly();
+            return new Outcome(txnId, state, validation, record, false, detailText);
+        }
+
         try { Files.deleteIfExists(payload); } catch (IOException ignored) { }
         try {
             if (keyFile != null) FileKeyVault.destroy(keyFile);
         } catch (IOException ignored) { }
         if (keyBytes != null) Arrays.fill(keyBytes, (byte) 0);
         state = State.ABORTED;
+        record.eventType = "ABORTED";
         record.verification.operationCompleted = false;
         record.verification.status = "ABORTED";
         record.validation.result = restored ? "FAIL" : "NOT_CHECKABLE";
@@ -319,19 +414,23 @@ public final class DestructionTransaction {
         record.validation.checks.add("restored: " + restored);
         record.assurance = AssuranceLevel.A0;
         journal.append(State.ABORTED, detail(Map.of("reason", detailText, "restored", restored)));
+        appendEvidenceQuietly();
+        return new Outcome(txnId, state, validation, record, restored, detailText);
+    }
+
+    private void appendEvidenceQuietly() {
         try {
             record.sign(evidenceKey.getPrivate());
             log.append(record);
             Checkpoint cp = log.checkpoint(logKey);
-            if (witness != null) witness.cosign(cp);
+            if (witness != null) witness.cosign(cp, log);
             Path checkpoints = cfg.workDir().resolve("checkpoints");
             Files.createDirectories(checkpoints);
             LogStore.writeCheckpoint(checkpoints.resolve(txnId + ".json"), cp);
             LogStore.writeCheckpoint(checkpoints.resolve("latest.json"), cp);
         } catch (Exception ignored) {
-            // An aborted transaction that cannot log is still aborted; the journal records it.
+            // The journal is the durable record if the log cannot be written; recovery reports it.
         }
-        return new Outcome(txnId, state, validation, record, restored, detailText);
     }
 
     private void require(State expected) {

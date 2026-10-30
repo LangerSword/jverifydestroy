@@ -164,7 +164,7 @@ public final class Main {
                 log.append(r);
             }
             Checkpoint cp = log.checkpoint(logKey.getPrivate());
-            new Witness("w", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(cp);
+            new Witness("w", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(cp, log);
             Path logFile = log.logFile();
             List<String> original = new ArrayList<>(Files.readAllLines(logFile));
             for (int i = 0; i < trials; i++) {
@@ -204,8 +204,14 @@ public final class Main {
 
                 // same-size fork
                 Checkpoint fork = Checkpoint.create("jvd.local/tamper", cp.size, new byte[32], logKey.getPrivate());
-                new Witness("w", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(fork);
-                detected = !LogVerifier.verify(logFile, fork, logKey.getPublic(), witnessKey.getPublic()).valid;
+                boolean cosigned;
+                try {
+                    new Witness("w", witnessKey.getPrivate(), witnessKey.getPublic()).cosign(fork, log);
+                    cosigned = true;
+                } catch (IllegalArgumentException expected) {
+                    cosigned = false;
+                }
+                detected = !cosigned || !LogVerifier.verify(logFile, fork, logKey.getPublic(), witnessKey.getPublic()).valid;
                 row(csv, "tamper", "fork", "checkpoint", i, detected ? "DETECTED" : "MISSED", "", "", "", 0, "");
             }
             Files.write(logFile, original);

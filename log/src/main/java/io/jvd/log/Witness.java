@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.MessageDigest;
 
 /**
  * A local independent witness. It is a second key on the same machine, not a remote party;
@@ -48,7 +49,23 @@ public final class Witness {
 
     public PublicKey publicKey() { return publicKey; }
 
+    /** A witness must never sign a checkpoint it cannot tie to a log. */
     public Checkpoint cosign(Checkpoint c) {
+        throw new IllegalArgumentException("cosign requires a consistency-checked log");
+    }
+
+    /** Verify the checkpoint is exactly the current log head before cosigning it. */
+    public Checkpoint cosign(Checkpoint c, LogStore log) {
+        if (c == null || log == null) throw new IllegalArgumentException("checkpoint and log are required");
+        if (c.origin == null || !c.origin.equals(log.origin())) {
+            throw new IllegalArgumentException("checkpoint origin does not match the log");
+        }
+        if (c.size != log.size()) {
+            throw new IllegalArgumentException("checkpoint size does not match the log");
+        }
+        if (!MessageDigest.isEqual(c.root(), log.root())) {
+            throw new IllegalArgumentException("checkpoint root does not match the log");
+        }
         c.cosign(name, key);
         return c;
     }

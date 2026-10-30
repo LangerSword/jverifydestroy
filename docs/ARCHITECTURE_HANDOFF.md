@@ -1,6 +1,12 @@
 # Architecture Handoff — for independent review
 
-Status: working prototype, 57 tests green, 4,406 experiment rows.
+Status: working prototype; this document describes the pre-remediation architecture. A
+remediation pass on 2026-10-30 added `COMMITTING`/`INTENT`/`CONFIRMED`, `RESTORE_FAILED`,
+`UNRESOLVED`, a derived assurance policy, overwrite-in-place key destruction, log locking,
+witness consistency checks, chunked JVD2 GCM, and a presenter. See `docs/REPRO.md`,
+`docs/RESEARCH_V2.md`, and `docs/adr/` for what is fixed; F4 (scanner coverage), full P4
+reconciliation, P9 (TOCTOU/hard links), and the U2–U6 product UX remain open.
+
 Review goal: find architectural defects, not missing polish. Do not assume features exist.
 Do not turn `NOT_CHECKABLE` into `PASS`.
 

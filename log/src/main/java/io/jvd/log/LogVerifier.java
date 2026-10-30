@@ -82,6 +82,7 @@ public final class LogVerifier {
         r.size = p.leaves.size();
         r.rootHash = Base64.getEncoder().encodeToString(p.root);
         for (String e : p.errors) r.error(e);
+        checkIntentResolution(p, r);
         checkCheckpoint(cp, r, logKey, witnessKey);
 
         if (cp.size != p.leaves.size()) {
@@ -97,6 +98,22 @@ public final class LogVerifier {
     public static Result verify(Path logFile, Path checkpointFile, PublicKey logKey, PublicKey witnessKey)
             throws IOException {
         return verify(logFile, LogStore.readCheckpoint(checkpointFile), logKey, witnessKey);
+    }
+
+    private static void checkIntentResolution(Parsed p, Result r) {
+        Set<String> intents = new HashSet<>();
+        Set<String> resolved = new HashSet<>();
+        for (Map<String, Object> record : p.records) {
+            String type = String.valueOf(record.getOrDefault("eventType", "RECORD"));
+            String id = String.valueOf(record.getOrDefault("eventId", ""));
+            if ("INTENT".equals(type)) intents.add(id);
+            else if ("CONFIRMED".equals(type) || "ABORTED".equals(type)
+                    || "RESTORE_FAILED".equals(type) || "UNRESOLVED".equals(type)) resolved.add(id);
+        }
+        for (String id : intents) {
+            if (!resolved.contains(id)) r.error("UNRESOLVED eventId " + id
+                    + ": INTENT without CONFIRMED/ABORTED record");
+        }
     }
 
     private static void checkCheckpoint(Checkpoint cp, Result r, PublicKey logKey, PublicKey witnessKey) {

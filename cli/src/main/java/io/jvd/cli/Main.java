@@ -9,6 +9,8 @@ import io.jvd.log.LogVerifier;
 import io.jvd.log.Witness;
 import io.jvd.memory.SecretBuffer;
 import io.jvd.txn.*;
+import io.jvd.presenter.Presenter;
+import io.jvd.presenter.UserMessage;
 import io.jvd.verify.Canary;
 import io.jvd.verify.CanaryVerifier;
 import io.jvd.verify.Mode;
@@ -29,7 +31,8 @@ public final class Main {
             return switch (args[0]) {
                 case "mem" -> mem();
                 case "file" -> file(args);
-                case "txn" -> txn(args);
+                case "shred" -> txn(args, true);
+                case "txn" -> txn(args, false);
                 case "verify" -> verify(args);
                 case "recover" -> recover(args);
                 case "selftest" -> selftest();
@@ -46,8 +49,9 @@ public final class Main {
                 jvd commands:
                   mem
                   file <path> [--passes N] [--delete-only] [--keep]
+                  shred <path> [--work DIR] [--details]
                   txn <path> [--mode overwrite|crypto] [--work DIR] [--image RAW]
-                             [--canary HEX] [--grace MS] [--require-checkable]
+                             [--canary HEX] [--grace MS] [--require-checkable] [--details]
                   verify [--work DIR]
                   recover [--work DIR]
                   selftest
@@ -88,6 +92,10 @@ public final class Main {
     }
 
     private static int txn(String[] args) throws Exception {
+        return txn(args, false);
+    }
+
+    private static int txn(String[] args, boolean friendly) throws Exception {
         Opts o = Opts.parse(args);
         if (o.pos.isEmpty()) return usage();
         Path target = Path.of(o.pos.get(0)).toAbsolutePath();
@@ -110,14 +118,23 @@ public final class Main {
         DestructionTransaction t = new DestructionTransaction(cfg, keys.evidence(), log,
                 keys.log().getPrivate(), witness);
         DestructionTransaction.Outcome out = t.run();
-        System.out.println("state=" + out.state() + " txn=" + out.txnId());
-        System.out.println("validation=" + out.validation().result() + " dataAbsent="
-                + out.validation().dataAbsent() + " restored=" + out.restored());
-        System.out.println("checks=" + out.validation().checks());
-        System.out.println("assurance=" + out.record().assurance + " (" + out.record().assurance.description() + ")");
-        System.out.println("journal=" + t.journalFile());
-        System.out.println("checkpoint=" + work.resolve("checkpoints").resolve("latest.json"));
-        System.out.println("detail=" + out.detail());
+        if (friendly) {
+            UserMessage msg = Presenter.present(ResultMapper.toResult(out));
+            System.out.println(msg.sentence());
+            if (o.flags.contains("--details")) {
+                System.out.println();
+                System.out.println(msg.details());
+            }
+        } else {
+            System.out.println("state=" + out.state() + " txn=" + out.txnId());
+            System.out.println("validation=" + out.validation().result() + " dataAbsent="
+                    + out.validation().dataAbsent() + " restored=" + out.restored());
+            System.out.println("checks=" + out.validation().checks());
+            System.out.println("assurance=" + out.record().assurance + " (" + out.record().assurance.description() + ")");
+            System.out.println("journal=" + t.journalFile());
+            System.out.println("checkpoint=" + work.resolve("checkpoints").resolve("latest.json"));
+            System.out.println("detail=" + out.detail());
+        }
         return out.state() == State.COMMITTED ? 0 : 1;
     }
 

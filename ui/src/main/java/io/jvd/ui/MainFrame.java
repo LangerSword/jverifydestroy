@@ -339,6 +339,35 @@ public final class MainFrame extends JFrame {
         }
     }
 
+    private String friendlyState(String state) {
+        return switch (state) {
+            case "COMMITTED" -> "Done";
+            case "ABORTED" -> "Stopped";
+            case "RESTORE_FAILED" -> "Needs help";
+            case "UNRESOLVED" -> "Unclear";
+            default -> "—";
+        };
+    }
+
+    private String friendlyValidation(String validation) {
+        return switch (validation) {
+            case "PASS" -> "Checked";
+            case "NOT_CHECKABLE" -> "Limited";
+            case "FAIL" -> "Failed";
+            case "RESTORE_FAILED" -> "Needs help";
+            default -> "—";
+        };
+    }
+
+    private String friendlyAssurance(String assurance) {
+        return switch (assurance) {
+            case "A2" -> "Standard";
+            case "A1" -> "Basic";
+            case "A0" -> "Minimal";
+            default -> "—";
+        };
+    }
+
     private void doDestroy() {
         Path target = Path.of(targetField.getText().trim());
         Path work = Path.of(workField.getText().trim());
@@ -358,24 +387,14 @@ public final class MainFrame extends JFrame {
                 v -> {
                     evidenceArea.setText(v.evidenceJson());
                     evidenceArea.setCaretPosition(0);
-                    stateMetric.setText(v.state());
-                    validationMetric.setText(v.validation());
-                    assuranceMetric.setText(v.assurance());
+                    stateMetric.setText(friendlyState(v.state()));
+                    validationMetric.setText(friendlyValidation(v.validation()));
+                    assuranceMetric.setText(friendlyAssurance(v.assurance()));
                     controlsMetric.setText(v.checks().stream()
-                            .anyMatch(x -> x.startsWith("positive control: FOUND")) ? "VALID" : "N/A");
+                            .anyMatch(x -> x.startsWith("positive control: FOUND")) ? "On" : "N/A");
                     logPane.append("");
-                    logPane.append("state=" + v.state() + "  validation=" + v.validation()
-                            + "  dataAbsent=" + v.dataAbsent() + "  restored=" + v.restored());
-                    logPane.append("assurance=" + v.assurance());
-                    for (String check : v.checks()) logPane.append("  check: " + check);
-                    logPane.append("journal=" + v.journal());
-                    logPane.append("checkpoint=" + v.checkpoint());
-                    logPane.append("detail=" + v.detail());
-                    if ("COMMITTED".equals(v.state())) {
-                        logPane.append("COMMITTED: the key/vault is gone; restore is impossible by design.");
-                    } else {
-                        logPane.append("ABORTED: original restored=" + v.restored() + ". Review the checks above.");
-                    }
+                    logPane.append(v.message().sentence());
+                    logPane.append("The Evidence JSON tab holds the technical record.");
                     tabs.setSelectedIndex(0);
                 });
     }

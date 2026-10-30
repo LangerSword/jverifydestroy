@@ -29,16 +29,15 @@ scripts/jvd.sh selftest       # one control-validated memory run
 scripts/jvd-ui.sh             # Swing desktop UI (JDK-only)
 ```
 
-Destroy a file and commit a crypto-shred:
+Destroy a file and get a plain-language result:
 
 ```bash
-scripts/jvd.sh txn ./secret.txt --mode crypto --work .jvd-work
-# state=COMMITTED ...
-# validation=NOT_CHECKABLE dataAbsent=false
-# assurance=A2 (crypto-shred committed; ... logical level only ...)
+scripts/jvd.sh shred ./secret.txt --work .jvd-work
+# The file is gone. We couldn't check the physical disk, so this is a software-level result.
 
+scripts/jvd.sh shred ./secret.txt --work .jvd-work --details  # technical facts
 scripts/jvd.sh verify --work .jvd-work
-# VALID size=1 root=...
+# VALID size=... root=...
 ```
 
 Recover a transaction that crashed before COMMIT:
@@ -83,6 +82,7 @@ flowchart LR
 | `destroy-file` | Overwrite+fsync+delete (Clear), AES-256-GCM crypto-shred, 0600 key vault |
 | `verify` | Canary derivation, child JVM victim, `/proc/<pid>/mem` scanner, mandatory controls, raw-image scanner |
 | `txn` | Journaled state machine, vault, crash recovery, commit/rollback |
+| `presenter` | Structured `Result` → plain user sentence + details (`GREEN`/`AMBER`/`RED`) |
 | `verifier-cli` | Offline `jvd-verify` |
 | `cli` | `jvd` commands |
 | `ui` | Swing desktop app: destroy, evidence JSON, verify, recover, memory self-test |
@@ -99,8 +99,10 @@ flowchart LR
 
 ![jVerifyDestroy Swing UI](docs/ui.png)
 
-The UI is a thin shell over `AppService`, which calls the same txn/verify/log code as the
-CLI. The backend tests (`AppServiceTest`) cover commit, verify, and rollback.
+The UI calls `AppService`, which calls the same txn/verify/log code as the CLI. Some key/log
+setup is still duplicated between `cli.Keys` and `ui.AppService`; merging it into one
+`JvdService` is P10 and is not complete. The backend tests (`AppServiceTest`) cover commit,
+verify, and rollback.
 
 Scaling: it auto-detects from screen width (1.0–1.7×), opens maximized on Hyprland, and
 accepts an override: `JVD_UI_SCALE=1.4 ./scripts/jvd-ui.sh` or `--scale=1.4`.
@@ -108,18 +110,35 @@ accepts an override: `JVD_UI_SCALE=1.4 ./scripts/jvd-ui.sh` or `--scale=1.4`.
 ## Transaction semantics
 
 ```
-STAGED -> VAULTED -> SCRUBBED -> VALIDATED -> [grace] -> COMMITTED
-                                    \-> ABORTED (restore)
+STAGED -> VAULTED -> SCRUBBED -> VALIDATED -> [grace] -> COMMITTING -> COMMITTED
+                                    \-> ABORTED (restore)        \-> UNRESOLVED
+                                                                  \-> RESTORE_FAILED
 ```
 
 - **STAGED / VAULTED**: the original is untouched; a crash aborts and deletes the vault.
 - **SCRUBBED / VALIDATED**: the original may be overwritten; a crash restores it from the vault.
-- **COMMITTED**: the vault and key are destroyed. Recovery never restores.
-  That irreversibility is the guarantee.
+- **COMMITTING**: a signed `INTENT` record and checkpoint are durable *before* key destruction.
+  A crash here can still restore if the key/payload exist; otherwise it is `UNRESOLVED`,
+  never a false `COMMITTED`.
+- **COMMITTED**: the key/vault is destroyed, `CONFIRMED` evidence is durable, and recovery
+  never restores. That irreversibility is the guarantee.
 - A failed validation, or a `NOT_CHECKABLE` result under `--require-checkable`, rolls back.
+- If a restore fails, the vault and key are **kept** and the state is `RESTORE_FAILED`; the
+  user can retry after fixing permissions or space.
 - `--grace MS` delays COMMIT; rollback is still allowed during the wait.
 
-The journal is JSONL, fsynced before each side effect. `kill -9` at every state is tested.
+The journal is JSONL, fsynced before each side effect. `kill -9` is tested at every state,
+including `COMMITTING`. The evidence log distinguishes `INTENT`, `CONFIRMED`, `ABORTED`,
+`RESTORE_FAILED`, and `UNRESOLVED`; an `INTENT` with no resolution is flagged `UNRESOLVED`
+by `jvd-verify`.
+
+## Plain-language result
+
+`jvd shred` uses the `presenter` module: the engine returns a structured `Result`, the
+presenter returns one sentence and a tone (green/amber/red). Default output contains no
+state names or engine jargon. `--details` (or the Evidence JSON tab) has the facts, checks,
+and paths. The mapping table is in
+[docs/adr/ADR-005-result-presenter.md](docs/adr/ADR-005-result-presenter.md).
 
 ## Verification oracle
 
@@ -152,7 +171,8 @@ truncated, and forked logs — provided the verifier has a checkpoint it already
 
 The witness is a second key on the same machine, not an independent party. A dishonest
 operator who controls both keys and withholds every old checkpoint can rewrite history.
-A3 narrows that window; it does not eliminate it.
+A3 is defined as “A2 + external witness + independent revalidation”, but no file transaction
+emits A3 today. The current witness is a local second key, not an independent party.
 
 ## Assurance levels
 
@@ -161,7 +181,7 @@ A3 narrows that window; it does not eliminate it.
 | A0 | deletion only |
 | A1 | best-effort overwrite + logical checks; physical media NOT verified |
 | A2 | crypto-shred committed, key destroyed, decrypt fails, required checks pass; canary controls apply only to memory subjects; logical level only |
-| A3 | A2 + witness-cosigned checkpoint + independent process re-validation; logical level only |
+| A3 | Defined but not emitted by file transactions. Requires an external pinned witness and independent revalidation; logical level only. |
 
 ## Claims and where they are tested
 
@@ -194,8 +214,9 @@ A3 narrows that window; it does not eliminate it.
 - The file overwrite path is NIST Clear. It does not sanitize an SSD.
 - The ext4 image overwrite experiment was not completed; the delete-only branch ran. See
   `docs/SPIKES.md` H6. No overwrite-on-ext4 claim is made.
-- A crash in the narrow window between destroying the key/vault and journaling COMMITTED
-  cannot be restored. Recovery reports the failure; it never claims a restore it did not make.
+- A crash after key destruction but before `CONFIRMED` evidence is `UNRESOLVED`; recovery
+  does not claim a restore it cannot perform. The `INTENT` record makes this visible instead
+  of guessing from a state label.
 
 ## Research
 
@@ -206,6 +227,10 @@ A3 narrows that window; it does not eliminate it.
 - [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) — every resolved ambiguity.
 - [docs/RELATED_WORK.md](docs/RELATED_WORK.md) — honest novelty statement.
 - [docs/RESULTS.md](docs/RESULTS.md) — generated from `experiments/out/results.csv`.
+- [docs/REPRO.md](docs/REPRO.md) — Phase 0 failing tests and finding status.
+- [docs/RESEARCH_V2.md](docs/RESEARCH_V2.md) — primary-source research for the fixes.
+- [docs/adr/](docs/adr/) — commit protocol, assurance, presenter, locking, key destruction,
+  file identity, scanner coverage, witness.
 - [docs/ARCHITECTURE_HANDOFF.md](docs/ARCHITECTURE_HANDOFF.md) — self-contained architecture
   review brief: modules, flows, known defects, target design, questions for a reviewer.
 
