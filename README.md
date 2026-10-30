@@ -1,5 +1,7 @@
 # jverifydestroy
 
+[![CI](https://github.com/LangerSword/jverifydestroy/actions/workflows/ci.yml/badge.svg)](https://github.com/LangerSword/jverifydestroy/actions/workflows/ci.yml)
+
 Verifiable secure data destruction for Java, at the logical level.
 
 `jverifydestroy` destroys a file or a memory secret, then **measures** what happened:
@@ -204,8 +206,10 @@ A3 narrows that window; it does not eliminate it.
 - [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) — every resolved ambiguity.
 - [docs/RELATED_WORK.md](docs/RELATED_WORK.md) — honest novelty statement.
 - [docs/RESULTS.md](docs/RESULTS.md) — generated from `experiments/out/results.csv`.
+- [docs/ARCHITECTURE_HANDOFF.md](docs/ARCHITECTURE_HANDOFF.md) — self-contained architecture
+  review brief: modules, flows, known defects, target design, questions for a reviewer.
 
 ## Licence
 
-No licence file yet; add one before publishing. The code is original except where
-`docs/RELATED_WORK.md` credits prior art.
+MIT — see [LICENSE](LICENSE). The code is original except where `docs/RELATED_WORK.md`
+credits prior art.
