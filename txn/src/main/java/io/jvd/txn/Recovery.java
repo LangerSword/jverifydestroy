@@ -60,6 +60,22 @@ public final class Recovery {
         if (last == State.COMMITTING) {
             boolean havePayload = payload != null && Files.exists(Path.of(payload));
             boolean haveKey = keyFile != null && Files.exists(Path.of(keyFile));
+            String eventId = journal.events().isEmpty() ? null
+                    : str(journal.events().get(journal.events().size() - 1).detail(), "eventId");
+            boolean confirmed = logHasConfirmed(workDir, eventId);
+            if (confirmed && !haveKey && !Files.exists(Path.of(target))) {
+                journal.append(State.COMMITTED, Map.of("reason", "reconciled from CONFIRMED evidence",
+                        "restored", false));
+                return new Result(txnId, State.COMMITTED, "committed; CONFIRMED evidence recovered",
+                        false, "reconciled from log");
+            }
+            if (confirmed) {
+                journal.append(State.UNRESOLVED, Map.of("reason", "CONFIRMED evidence but key/target inconsistent",
+                        "restored", false));
+                return new Result(txnId, State.UNRESOLVED,
+                        "unresolved: CONFIRMED evidence but key or target still present", false,
+                        "do not claim committed");
+            }
             if (havePayload && haveKey) {
                 boolean restored = false;
                 String detail = "";
@@ -88,7 +104,7 @@ public final class Recovery {
             }
             journal.append(State.UNRESOLVED, Map.of("reason", "COMMITTING without key/payload",
                     "restored", false));
-            return new Result(txnId, last, "unresolved: key/payload missing after COMMITTING", false,
+            return new Result(txnId, State.UNRESOLVED, "unresolved: key/payload missing after COMMITTING", false,
                     "cannot restore and cannot claim COMMITTED");
         }
 
@@ -145,6 +161,27 @@ public final class Recovery {
         journal.append(State.UNRESOLVED, Map.of("reason", "recovered from " + last,
                 "restored", false, "detail", detail));
         return new Result(txnId, last, "restore material missing; unresolved", false, detail);
+    }
+
+    private static boolean logHasConfirmed(Path workDir, String eventId) {
+        if (eventId == null || eventId.isBlank()) return false;
+        Path log = workDir.resolve("log").resolve("log.jsonl");
+        if (!Files.exists(log)) return false;
+        try {
+            for (String line : Files.readAllLines(log)) {
+                if (line.isBlank()) continue;
+                Map<String, Object> m = Json.parseObject(line);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> record = (Map<String, Object>) m.get("record");
+                if (record != null && "CONFIRMED".equals(String.valueOf(record.get("eventType")))
+                        && eventId.equals(String.valueOf(record.get("eventId")))) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+        return false;
     }
 
     private static String str(Map<String, Object> m, String k) {

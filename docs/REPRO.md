@@ -15,10 +15,10 @@ a measurement, or a documented manual probe where root/raw media is required.
 | F1 | CONFIRMED | `FindingReproTest.f1ConcurrentRecoverDuringGraceMustNotCommitAsA2` fails: state is `COMMITTED` after an external recovery restored the target. |
 | F2 | CONFIRMED | `FindingReproTest.f2FailedRestoreMustKeepVaultAndKey` fails: the container and key are deleted after a failed restore. |
 | F3 | CONFIRMED | `FileKeyVault.destroy` opens with `TRUNCATE_EXISTING` before writing zeros; `FileKeyVault.write` creates then chmods. Source lines 18 and 38. |
-| F4 | CONFIRMED | `MemoryScanner` adds the full region length before reads; `break`s on read error; skips regions > 2 GiB; skips every named mapping except `[heap]`/`/memfd:`. `MapCoverage` measured 4.5% of G1 rw bytes and 4.6% of ZGC rw bytes skipped (plus a named 1 MiB file mapping). |
+| F4 | CONFIRMED, then PARTIAL fix | Original scanner skipped named/large regions and had no coverage. P7 now includes all rw mappings, uses mincore residency, records read errors, and scans named mappings; single-pass multi-canary remains. |
 | F5 | CONFIRMED | `FindingReproTest.f5TwoStoresMustNotCreateDuplicateSequenceNumbers` fails: two stores write seq 0; reload throws `log gap at 0, expected 1`. |
 | F6 | CONFIRMED | `FindingReproTest.f6WitnessMustNotCosignAForgedCheckpoint` fails: `Witness.cosign` signs an arbitrary checkpoint without a consistency check. |
-| F7 | CONFIRMED (test gap) | `Kill9RecoveryTest` parameterizes `CRYPTO_SHRED` only and uses `jvd.crashAt` after journal writes; there is no crash point inside `commit()`, and no OVERWRITE kill test. |
+| F7 | CONFIRMED, then FIXED | 16-case matrix now covers STAGED/VAULTED/SCRUBBED/VALIDATED/COMMITTING/KEY_DESTROYED/CONFIRMED/COMMITTED for both methods. |
 | F8 | CONFIRMED | OpenJDK `GaloisCounterMode` source says decryption “will buffer all processed outputs internally and won't return them until the tag has been successfully verified.” `CryptoMemProbe` with a 128 MiB container at `-Xmx32m` threw `OutOfMemoryError: Java heap space`. |
 
 ## Raw F1/F2/F5/F6 test output
@@ -132,10 +132,10 @@ patches make them pass without weakening any existing test.
 | F1 | FIXED | `commit()` preflights `Files.exists(target)` and refuses to destroy the key; post-checks no longer set `COMMITTED`; an `UNRESOLVED` state records a failed post-check. |
 | F2 | FIXED | `rollback()` and `Recovery` add `RESTORE_FAILED`; they keep the vault and key when restore fails. The failing test now passes. |
 | F3 | FIXED (unit) | `FileKeyVault.destroy` opens without truncation and overwrites every existing byte; `write` uses `CREATE_NEW` with 0600 at creation. Manual ext4 block inspection is still TO VERIFY. |
-| F4 | OPEN | Scanner coverage/snapshot rewrite (P7) is not implemented. Named mappings and >2 GiB regions are still skipped. |
+| F4 | PARTIAL | P7 now includes named/large mappings, records coverage/read errors, and uses mincore residency; single-pass multi-canary and a mincore fallback policy remain. |
 | F5 | FIXED | `LogStore.append` takes a JVM lock plus a file lock on `log.lock` and reloads the tail before assigning seq. |
 | F6 | FIXED | `Witness.cosign(checkpoint, log)` verifies origin, size, and root before signing; the old `cosign(checkpoint)` throws. |
-| F7 | PARTIAL | A `COMMITTING` crash point and a kill-9 test at that state exist. A crash between key destruction and `CONFIRMED`, and OVERWRITE kill-9, are still not covered. |
+| F7 | FIXED | 16-case kill matrix: 8 points x 2 methods, including KEY_DESTROYED and CONFIRMED; CONFIRMED evidence reconciles to COMMITTED. |
 | F8 | FIXED | JVD2 chunked GCM with per-chunk tags; 128 MiB decrypts at `-Xmx32m` (`CryptoMemProbe`). JVD1 remains read-only and still buffers. |
 
 `FindingReproTest` now passes all four tests. The existing tests were not weakened.

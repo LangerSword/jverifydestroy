@@ -35,7 +35,7 @@ public final class DestructionTransaction {
 
     @FunctionalInterface
     public interface CrashHook {
-        void after(State state);
+        void after(String point);
     }
 
     private final TxnConfig cfg;
@@ -57,8 +57,8 @@ public final class DestructionTransaction {
 
     public DestructionTransaction(TxnConfig cfg, KeyPair evidenceKey, LogStore log,
                                   PrivateKey logKey, Witness witness) {
-        this(cfg, evidenceKey, log, logKey, witness, state -> {
-            if (state.name().equals(System.getProperty("jvd.crashAt"))) {
+        this(cfg, evidenceKey, log, logKey, witness, point -> {
+            if (point.equals(System.getProperty("jvd.crashAt"))) {
                 Runtime.getRuntime().halt(137);
             }
         });
@@ -126,7 +126,7 @@ public final class DestructionTransaction {
             record.validation.checks.add("raw image pre-check: " + pre.verdict()
                     + (pre.reason() == null ? "" : " (" + pre.reason() + ")"));
         }
-        crashHook.after(State.STAGED);
+        crashHook.after("STAGED");
 
         Path keys = cfg.workDir().resolve("keys");
         Files.createDirectories(keys);
@@ -150,7 +150,7 @@ public final class DestructionTransaction {
         record.verification.status = "VAULTED";
         journal.append(State.VAULTED, detail(Map.of("target", cfg.target().toString(),
                 "payload", payload.toString(), "keyFile", keyFile.toString(), "size", size)));
-        crashHook.after(State.VAULTED);
+        crashHook.after("VAULTED");
     }
 
     public FileDestroyer.Result scrub() throws IOException {
@@ -160,7 +160,7 @@ public final class DestructionTransaction {
         record.verification.status = "SCRUBBED";
         journal.append(State.SCRUBBED, detail(Map.of("bytes", d.bytes(), "passes", d.passes(),
                 "deleted", d.deleted(), "note", d.note())));
-        crashHook.after(State.SCRUBBED);
+        crashHook.after("SCRUBBED");
         return d;
     }
 
@@ -211,7 +211,7 @@ public final class DestructionTransaction {
         record.verification.status = "VALIDATED";
         journal.append(State.VALIDATED, detail(Map.of("result", result,
                 "checks", checks, "reason", reason == null ? "" : reason)));
-        crashHook.after(State.VALIDATED);
+        crashHook.after("VALIDATED");
         return validation;
     }
 
@@ -250,7 +250,7 @@ public final class DestructionTransaction {
                 "target", cfg.target().toString(), "payload", payload == null ? "" : payload.toString(),
                 "keyFile", keyFile == null ? "" : keyFile.toString(),
                 "checkpoint", intentCheckpoint.toJson())));
-        crashHook.after(State.COMMITTING);
+        crashHook.after("COMMITTING");
 
         List<String> postChecks = new ArrayList<>();
         boolean ok = true;
@@ -266,6 +266,8 @@ public final class DestructionTransaction {
             postChecks.add("vault destroyed: " + (Files.exists(payload) ? "FAIL" : "PASS"));
             if (Files.exists(payload)) ok = false;
         }
+        crashHook.after("KEY_DESTROYED");
+
         if (Files.exists(cfg.target())) {
             postChecks.add("path absent: FAIL");
             ok = false;
@@ -311,7 +313,7 @@ public final class DestructionTransaction {
             LogStore.writeCheckpoint(checkpoints.resolve("latest.json"), cp);
             journal.append(State.UNRESOLVED, detail(Map.of("result", "FAIL",
                     "checks", postChecks, "checkpoint", cp.toJson())));
-            crashHook.after(State.UNRESOLVED);
+            crashHook.after("UNRESOLVED");
             return new Outcome(txnId, state, validation, record, false,
                     "UNRESOLVED: post-checks failed; no COMMITTED claim");
         }
@@ -341,10 +343,11 @@ public final class DestructionTransaction {
         Files.createDirectories(checkpoints);
         LogStore.writeCheckpoint(checkpoints.resolve(txnId + ".json"), cp);
         LogStore.writeCheckpoint(checkpoints.resolve("latest.json"), cp);
+        crashHook.after("CONFIRMED");
 
         journal.append(State.COMMITTED, detail(Map.of("result", postResult,
                 "checks", postChecks, "checkpoint", cp.toJson())));
-        crashHook.after(State.COMMITTED);
+        crashHook.after("COMMITTED");
         return new Outcome(txnId, state, validation, record, false,
                 "COMMITTED: no restore is possible after this point");
     }

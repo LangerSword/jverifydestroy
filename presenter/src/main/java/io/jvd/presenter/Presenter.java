@@ -24,14 +24,14 @@ public final class Presenter {
             case SUCCESS_WITH_LIMITS -> "The file is gone. We couldn't check the physical disk, so this is a software-level result.";
             case RESTORE_FAILED -> "We couldn't put the file back. Keep the recovery folder and try again.";
             case INVALID -> "The safety check didn't run correctly, so we can't confirm the file is gone.";
-            case UNRESOLVED -> "Something changed during the final step. Treat the file as still present until you check Details.";
+            case UNRESOLVED -> "The file might not be deleted. Do not rely on it.";
             case ERROR -> "Nothing was changed. Details explain what went wrong.";
             case CANCELLED -> "Nothing was changed.";
         };
         Tone tone = switch (result.outcome()) {
             case SUCCESS -> Tone.GREEN;
-            case SUCCESS_WITH_LIMITS, CANCELLED -> Tone.AMBER;
-            case RESTORE_FAILED, INVALID, UNRESOLVED, ERROR -> Tone.RED;
+            case SUCCESS_WITH_LIMITS, CANCELLED, UNRESOLVED -> Tone.AMBER;
+            case RESTORE_FAILED, INVALID, ERROR -> Tone.RED;
         };
         for (String banned : BANNED) {
             if (sentence.toLowerCase(java.util.Locale.ROOT).contains(banned)) {

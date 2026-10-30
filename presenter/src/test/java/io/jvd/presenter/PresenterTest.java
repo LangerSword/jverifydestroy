@@ -28,7 +28,7 @@ class PresenterTest {
         assertEquals(Tone.AMBER, Presenter.present(Result.of(Outcome.CANCELLED, Map.of(), List.of(), "")).tone());
         assertEquals(Tone.RED, Presenter.present(Result.of(Outcome.RESTORE_FAILED, Map.of(), List.of(), "")).tone());
         assertEquals(Tone.RED, Presenter.present(Result.of(Outcome.INVALID, Map.of(), List.of(), "")).tone());
-        assertEquals(Tone.RED, Presenter.present(Result.of(Outcome.UNRESOLVED, Map.of(), List.of(), "")).tone());
+        assertEquals(Tone.AMBER, Presenter.present(Result.of(Outcome.UNRESOLVED, Map.of(), List.of(), "")).tone());
         assertEquals(Tone.RED, Presenter.present(Result.of(Outcome.ERROR, Map.of(), List.of(), "")).tone());
     }
 

@@ -31,10 +31,17 @@ public final class CanaryVerifier {
         ScanResult target;
         ScanResult positive;
         ScanResult negative;
+        boolean stopped = false;
         try (VictimProcess victim = VictimProcess.start(seed, mode.name(), gc)) {
-            target = MemoryScanner.scan(victim.pid(), targetMasked);
-            positive = MemoryScanner.scan(victim.pid(), controlMasked);
-            negative = MemoryScanner.scan(victim.pid(), negativeMasked);
+            long pid = victim.pid();
+            stopped = ProcessSignal.stop(pid);
+            try {
+                target = MemoryScanner.scan(pid, targetMasked);
+                positive = MemoryScanner.scan(pid, controlMasked);
+                negative = MemoryScanner.scan(pid, negativeMasked);
+            } finally {
+                if (stopped) ProcessSignal.resume(pid);
+            }
         } catch (Exception e) {
             ScanResult nc = ScanResult.notCheckable("victim failed: " + e.getMessage(), 0, 0, ms(t0));
             return new ValidationResult("NOT_CHECKABLE", false, nc, nc, nc,
@@ -46,12 +53,18 @@ public final class CanaryVerifier {
             Arrays.fill(seed, (byte) 0);
         }
 
-        return evaluate(target, positive, negative, ms(t0));
+        return evaluate(target, positive, negative, stopped, ms(t0));
     }
 
     /** Pure control logic, separated so it can be tested without a child process. */
     public static ValidationResult evaluate(ScanResult target, ScanResult positive, ScanResult negative, long ms) {
+        return evaluate(target, positive, negative, true, ms);
+    }
+
+    public static ValidationResult evaluate(ScanResult target, ScanResult positive, ScanResult negative,
+                                            boolean stopped, long ms) {
         List<String> checks = new ArrayList<>();
+        checks.add("snapshot: " + (stopped ? "frozen" : "NOT frozen"));
         checks.add("positive control: " + positive.verdict() + " (expected FOUND)");
         checks.add("negative control: " + negative.verdict() + " (expected NOT_FOUND)");
         checks.add("target: " + target.verdict() + " (expected NOT_FOUND)");
@@ -71,6 +84,10 @@ public final class CanaryVerifier {
         if (target.found()) {
             return new ValidationResult("FAIL", false, target, positive, negative, checks,
                     "target canary is still present in process memory", ms);
+        }
+        if (!stopped) {
+            return new ValidationResult("NOT_CHECKABLE", false, target, positive, negative, checks,
+                    "could not freeze the victim for a consistent snapshot", ms);
         }
         return new ValidationResult("PASS", true, target, positive, negative, checks, null, ms);
     }

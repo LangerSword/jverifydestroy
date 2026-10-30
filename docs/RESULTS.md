@@ -1,5 +1,11 @@
 # RESULTS — generated from `experiments/out/results.csv`
 
+> **PRE-COVERAGE-FIX.** These numbers were produced by the pre-P7 scanner. The
+> scanner skips named/large regions and does not report coverage, so the memory
+> false-assurance rates are lower bounds on the validator’s blind spots, not final
+> results. Do not cite them as post-P7 results until P7 lands.
+
+
 JDK: 25.0.5+8-LTS  
 OS: Linux 7.2.11-arch1-1  
 Trials per memory cell: 200
@@ -8,7 +14,7 @@ Every memory trial carries a positive control (unwiped canary) and a negative co
 
 ## Memory matrix
 
-| collector | mode | valid | target FOUND (false assurance) | rate | Wilson 95% CI | positive control FOUND |
+| collector (pre-coverage-fix) | mode | valid | target FOUND (false assurance) | rate | Wilson 95% CI | positive control FOUND |
 |---|---|---|---|---|---|---|
 | G1 | HOT | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
 | G1 | MOVE | 200 | 0 | 0.000 | [0.000, 0.019] | 1.000 |
@@ -28,7 +34,7 @@ Every memory trial carries a positive control (unwiped canary) and a negative co
 
 ## File matrix
 
-| method | trials | logical result | note |
+| method (pre-coverage-fix) | trials | logical result | note |
 |---|---|---|---|
 | crypto | 200 | 200/200 | raw-media residue NOT_CHECKABLE without an image |
 | delete-only | 200 | 200/200 | raw-media residue NOT_CHECKABLE without an image |
@@ -36,7 +42,7 @@ Every memory trial carries a positive control (unwiped canary) and a negative co
 
 ## Tamper matrix
 
-| mutation | trials | detected | rate |
+| mutation (pre-coverage-fix) | trials | detected | rate |
 |---|---|---|---|
 | backdate | 200 | 200 | 1.000 |
 | delete | 200 | 200 | 1.000 |

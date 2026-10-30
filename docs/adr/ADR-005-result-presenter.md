@@ -28,7 +28,7 @@ Tone is exactly GREEN, AMBER, RED.
 | SUCCESS_WITH_LIMITS | AMBER | The file is gone. We couldn't check the physical disk, so this is a software-level result. |
 | RESTORE_FAILED | RED | We couldn't put the file back. Keep the recovery folder and try again. |
 | INVALID | RED | The safety check didn't run correctly, so we can't confirm the file is gone. |
-| UNRESOLVED | RED | Something changed during the final step. Treat the file as still present until you check Details. |
+| UNRESOLVED | AMBER | The file might not be deleted. Do not rely on it. |
 | ERROR | RED | Nothing was changed. Details explain what went wrong. |
 | CANCELLED | AMBER | Nothing was changed. |
 
