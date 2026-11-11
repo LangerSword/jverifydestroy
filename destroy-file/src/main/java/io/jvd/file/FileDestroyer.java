@@ -15,6 +15,16 @@ import java.security.SecureRandom;
  * physical erasure.
  */
 public final class FileDestroyer {
+    /**
+     * What a destruction did.
+     *
+     * @param bytes         how many bytes were overwritten
+     * @param passes        how many overwrite passes were written
+     * @param deleted       whether the file is <em>actually</em> gone from the directory now,
+     *                      measured after the fact rather than taken from the request
+     * @param elapsedMillis how long the work took
+     * @param note          the honest scope of the result
+     */
     public record Result(long bytes, int passes, boolean deleted, long elapsedMillis, String note) {}
 
     private FileDestroyer() {}
@@ -49,17 +59,43 @@ public final class FileDestroyer {
                 ch.force(true);
             }
         }
-        if (delete) Files.deleteIfExists(path);
+        if (delete) {
+            // The unlink can fail on its own: a directory that cannot be written to is
+            // the usual reason. That is not an error in the overwrite — the bytes are
+            // already gone — so it is reported as "not deleted" rather than thrown. The
+            // caller needs to know the file survived, because a destroyed file and a
+            // zeroed file that is still in the directory are different states.
+            try {
+                Files.deleteIfExists(path);
+            } catch (IOException e) {
+                return new Result(size, passes, false, (System.nanoTime() - start) / 1_000_000,
+                        "overwritten, but the file could not be removed because " + e.getMessage()
+                                + "; it is still in the directory, though its contents are zeros");
+            }
+        }
         long ms = (System.nanoTime() - start) / 1_000_000;
-        return new Result(size, passes, delete, ms,
+        // Whether the file is really gone is a fact about the filesystem, not about the
+        // request that was made. Reporting the request would let a script treat a failed
+        // unlink as a successful destruction.
+        boolean gone = !Files.exists(path);
+        return new Result(size, passes, gone, ms,
                 "NIST Clear (overwrite); physical media NOT verified; journal/COW/FTL may retain copies");
     }
 
     public static Result deleteOnly(Path path) throws IOException {
         long size = Files.size(path);
         long start = System.nanoTime();
-        Files.deleteIfExists(path);
-        return new Result(size, 0, true, (System.nanoTime() - start) / 1_000_000,
-                "unlink only; contents may remain in free blocks");
+        boolean gone;
+        try {
+            Files.deleteIfExists(path);
+            // Measured after the fact, for the same reason as above: the unlink can fail
+            // without throwing, and the caller needs to know whether the file survived.
+            gone = !Files.exists(path);
+        } catch (IOException e) {
+            gone = false;
+        }
+        return new Result(size, 0, gone, (System.nanoTime() - start) / 1_000_000,
+                gone ? "unlink only; contents may remain in free blocks"
+                        : "the file could not be removed; it is still at " + path);
     }
 }

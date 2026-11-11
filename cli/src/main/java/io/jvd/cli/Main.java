@@ -90,6 +90,14 @@ public final class Main {
         System.out.println("bytes=" + r.bytes() + " passes=" + r.passes() + " deleted=" + r.deleted()
                 + " ms=" + r.elapsedMillis());
         System.out.println(r.note());
+        // The exit code has to reflect what happened, not what was asked for. A file that
+        // was overwritten but could not be unlinked is not a successful destruction, and
+        // a script that checks the exit code would otherwise believe it was.
+        if (!r.deleted() && !o.flags.contains("--keep")) {
+            System.err.println("error: the file was overwritten but could not be removed; "
+                    + "it is still at " + p);
+            return 1;
+        }
         return 0;
     }
 
