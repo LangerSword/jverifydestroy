@@ -43,6 +43,19 @@ jobs:
           # path.
           MAVEN_OPTS: -Djava.awt.headless=true
 
+      - name: Verify (retry on a mirror)
+        # The wrapper downloads Maven itself on a cold runner, and that download can
+        # fail on a transient network error — which fails the whole job for a reason
+        # that has nothing to do with the code. The wrapper honours MVNW_REPOURL, so
+        # a second attempt against a mirror gives the build a second chance before
+        # it is called a failure.
+        if: failure()
+        run: |
+          echo "the build failed; retrying the Maven download against a mirror"
+          MVNW_REPOURL=https://repo1.maven.org/maven2 ./mvnw -B -q verify
+        env:
+          MAVEN_OPTS: -Djava.awt.headless=true
+
       - name: Check the runnable jars
         if: matrix.gc == 'G1'
         run: |

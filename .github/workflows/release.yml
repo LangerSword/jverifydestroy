@@ -29,6 +29,13 @@ jobs:
       - name: Verify
         run: ./mvnw -B -q verify
 
+      - name: Verify (retry on a mirror)
+        # The wrapper downloads Maven itself on a cold runner, and that download can
+        # fail on a transient network error. A release must not be lost to a bad
+        # minute on the network, so the build gets a second attempt against a mirror.
+        if: failure()
+        run: MVNW_REPOURL=https://repo1.maven.org/maven2 ./mvnw -B -q verify
+
       - name: Build the artifacts
         run: ./scripts/build-release.sh
 
