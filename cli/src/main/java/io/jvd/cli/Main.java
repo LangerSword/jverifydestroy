@@ -29,6 +29,7 @@ public final class Main {
         if (args.length == 0) return usage();
         try {
             return switch (args[0]) {
+                case "version" -> version();
                 case "mem" -> mem();
                 case "file" -> file(args);
                 case "shred" -> txn(args, true);
@@ -45,9 +46,46 @@ public final class Main {
         }
     }
 
+    /**
+     * Prints the version.
+     *
+     * <p>A released tool has to be able to say which version it is. A user reads that
+     * line and puts it in a bug report; a hosting site reads it to decide which
+     * artifact to offer; and a support question about "is this the version with the
+     * fix" is unanswerable without it.
+     *
+     * <p>The version comes from the manifest of the jar the code is running in, so it
+     * cannot drift from the build. When the classes are run from a directory rather
+     * than a jar, there is no manifest, and the build version is reported instead.
+     */
+    private static int version() {
+        String v = versionFromManifest();
+        System.out.println("jvd " + v);
+        System.out.println("jvm  " + System.getProperty("java.vm.name") + " "
+                + System.getProperty("java.version"));
+        System.out.println("os   " + System.getProperty("os.name") + " "
+                + System.getProperty("os.arch"));
+        return 0;
+    }
+
+    /** The implementation version, read from the jar manifest when there is one. */
+    private static String versionFromManifest() {
+        try {
+            var pkg = Main.class.getPackage();
+            if (pkg != null) {
+                String v = pkg.getImplementationVersion();
+                if (v != null && !v.isBlank()) return v;
+            }
+        } catch (RuntimeException ignored) {
+            // Fall through to the build version.
+        }
+        return io.jvd.evidence.Env.VERSION;
+    }
+
     private static int usage() {
         System.err.println("""
                 jvd commands:
+                  version
                   mem
                   file <path> [--passes N] [--delete-only] [--keep]
                   shred <path> [--work DIR] [--details]

@@ -22,4 +22,44 @@
         <version>${project.version}</version>
       </dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <!--
+        Produces one self-contained runnable jar: `java -jar jvd-verify-1.0.0.jar ...`.
+
+        The verifier has a specific reason to be a single file: it is the thing
+        an auditor or a customer receives. They are handed a receipt and asked
+        whether it is genuine, and they should not have to check out a repository
+        and assemble a classpath to do it. One jar that runs offline, with no
+        network access and no dependencies to resolve, is the whole point.
+
+        The project is JDK-only, so shading the two modules it depends on is all
+        that is needed.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>io.jvd.verifycli.Main</mainClass>
+                  <manifestEntries>
+                    <!-- The version command reads this, so it cannot drift from the build. -->
+                    <Implementation-Title>jverifydestroy</Implementation-Title>
+                    <Implementation-Version>${project.version}</Implementation-Version>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

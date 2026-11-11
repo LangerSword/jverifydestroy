@@ -47,4 +47,43 @@
       <version>${project.version}</version>
     </dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <!--
+        Produces one self-contained runnable jar: `java -jar jvd-1.0.0.jar shred FILE`.
+
+        A released tool should be one file a user can download and run. Without
+        this, the jar is a thin archive with no Main-Class and the user has to
+        assemble a classpath out of the working tree, which is a job for
+        someone who already understands the project.
+
+        The project is JDK-only, so shading the six modules it depends on is all
+        that is needed — no third-party runtime to bundle.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>io.jvd.cli.Main</mainClass>
+                  <manifestEntries>
+                    <!-- The version command reads this, so it cannot drift from the build. -->
+                    <Implementation-Title>jverifydestroy</Implementation-Title>
+                    <Implementation-Version>${project.version}</Implementation-Version>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
