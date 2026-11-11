@@ -38,12 +38,30 @@ public final class DestructionTransaction {
         void after(String point);
     }
 
+    /**
+     * Notified as the transaction moves through its stages.
+     *
+     * <p>This exists because a destruction of a large file takes real time, and a user
+     * watching a frozen window cannot tell a slow operation from a hung one. The observer
+     * is called on the thread doing the work, so an implementation that touches Swing must
+     * marshal to the event dispatch thread itself; the desktop app does exactly that.
+     *
+     * <p>The point names are the same strings the {@link CrashHook} uses, so a test that
+     * injects a crash at one stage and an observer that watches stages agree on one
+     * vocabulary.
+     */
+    @FunctionalInterface
+    public interface StageObserver {
+        void onStage(String point, State state);
+    }
+
     private final TxnConfig cfg;
     private final KeyPair evidenceKey;
     private final LogStore log;
     private final PrivateKey logKey;
     private final Witness witness;
     private final CrashHook crashHook;
+    private final StageObserver observer;
 
     private String txnId;
     private Journal journal;
@@ -64,14 +82,51 @@ public final class DestructionTransaction {
         });
     }
 
+    /**
+     * Builds a transaction that also reports its stages.
+     *
+     * <p>The observer is called after each stage completes, with the point name and the
+     * state the transaction has just entered. A null observer means "report nothing",
+     * which is what the command line wants: a script does not need progress events.
+     */
+    public DestructionTransaction(TxnConfig cfg, KeyPair evidenceKey, LogStore log,
+                                  PrivateKey logKey, Witness witness,
+                                  StageObserver observer) {
+        this(cfg, evidenceKey, log, logKey, witness, point -> {
+            if (point.equals(System.getProperty("jvd.crashAt"))) {
+                Runtime.getRuntime().halt(137);
+            }
+        }, observer);
+    }
+
     public DestructionTransaction(TxnConfig cfg, KeyPair evidenceKey, LogStore log,
                                   PrivateKey logKey, Witness witness, CrashHook crashHook) {
+        this(cfg, evidenceKey, log, logKey, witness, crashHook, null);
+    }
+
+    public DestructionTransaction(TxnConfig cfg, KeyPair evidenceKey, LogStore log,
+                                  PrivateKey logKey, Witness witness, CrashHook crashHook,
+                                  StageObserver observer) {
         this.cfg = Objects.requireNonNull(cfg);
         this.evidenceKey = Objects.requireNonNull(evidenceKey);
         this.log = Objects.requireNonNull(log);
         this.logKey = Objects.requireNonNull(logKey);
         this.witness = witness;
         this.crashHook = Objects.requireNonNull(crashHook);
+        this.observer = observer;
+    }
+
+    /**
+     * Signals that a stage has completed.
+     *
+     * <p>The observer is notified before the crash hook, so that a test that watches stages
+     * sees the stage even when the crash hook halts the JVM immediately afterwards. The
+     * observer is given the state the transaction has just entered, which is more useful
+     * to a listener than the point name alone.
+     */
+    private void stage(String point) {
+        if (observer != null) observer.onStage(point, state);
+        crashHook.after(point);
     }
 
     public String txnId() { return txnId; }
@@ -126,7 +181,7 @@ public final class DestructionTransaction {
             record.validation.checks.add("raw image pre-check: " + pre.verdict()
                     + (pre.reason() == null ? "" : " (" + pre.reason() + ")"));
         }
-        crashHook.after("STAGED");
+        stage("STAGED");
 
         Path keys = cfg.workDir().resolve("keys");
         Files.createDirectories(keys);
@@ -150,7 +205,7 @@ public final class DestructionTransaction {
         record.verification.status = "VAULTED";
         journal.append(State.VAULTED, detail(Map.of("target", cfg.target().toString(),
                 "payload", payload.toString(), "keyFile", keyFile.toString(), "size", size)));
-        crashHook.after("VAULTED");
+        stage("VAULTED");
     }
 
     public FileDestroyer.Result scrub() throws IOException {
@@ -160,7 +215,7 @@ public final class DestructionTransaction {
         record.verification.status = "SCRUBBED";
         journal.append(State.SCRUBBED, detail(Map.of("bytes", d.bytes(), "passes", d.passes(),
                 "deleted", d.deleted(), "note", d.note())));
-        crashHook.after("SCRUBBED");
+        stage("SCRUBBED");
         return d;
     }
 
@@ -211,7 +266,7 @@ public final class DestructionTransaction {
         record.verification.status = "VALIDATED";
         journal.append(State.VALIDATED, detail(Map.of("result", result,
                 "checks", checks, "reason", reason == null ? "" : reason)));
-        crashHook.after("VALIDATED");
+        stage("VALIDATED");
         return validation;
     }
 
@@ -250,7 +305,7 @@ public final class DestructionTransaction {
                 "target", cfg.target().toString(), "payload", payload == null ? "" : payload.toString(),
                 "keyFile", keyFile == null ? "" : keyFile.toString(),
                 "checkpoint", intentCheckpoint.toJson())));
-        crashHook.after("COMMITTING");
+        stage("COMMITTING");
 
         List<String> postChecks = new ArrayList<>();
         boolean ok = true;
@@ -266,7 +321,7 @@ public final class DestructionTransaction {
             postChecks.add("vault destroyed: " + (Files.exists(payload) ? "FAIL" : "PASS"));
             if (Files.exists(payload)) ok = false;
         }
-        crashHook.after("KEY_DESTROYED");
+        stage("KEY_DESTROYED");
 
         if (Files.exists(cfg.target())) {
             postChecks.add("path absent: FAIL");
@@ -313,7 +368,7 @@ public final class DestructionTransaction {
             LogStore.writeCheckpoint(checkpoints.resolve("latest.json"), cp);
             journal.append(State.UNRESOLVED, detail(Map.of("result", "FAIL",
                     "checks", postChecks, "checkpoint", cp.toJson())));
-            crashHook.after("UNRESOLVED");
+            stage("UNRESOLVED");
             return new Outcome(txnId, state, validation, record, false,
                     "UNRESOLVED: post-checks failed; no COMMITTED claim");
         }
@@ -343,11 +398,11 @@ public final class DestructionTransaction {
         Files.createDirectories(checkpoints);
         LogStore.writeCheckpoint(checkpoints.resolve(txnId + ".json"), cp);
         LogStore.writeCheckpoint(checkpoints.resolve("latest.json"), cp);
-        crashHook.after("CONFIRMED");
+        stage("CONFIRMED");
 
         journal.append(State.COMMITTED, detail(Map.of("result", postResult,
                 "checks", postChecks, "checkpoint", cp.toJson())));
-        crashHook.after("COMMITTED");
+        stage("COMMITTED");
         return new Outcome(txnId, state, validation, record, false,
                 "COMMITTED: no restore is possible after this point");
     }
