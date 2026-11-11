@@ -57,7 +57,9 @@ cp "$STAGE/jvd-web-$VERSION.jar" "$OUT/jvd-web-$VERSION.jar"
 
 echo "==> checksums"
 cd "$OUT"
-sha256sum ./*.jar ./*.tar.gz | tee SHA256SUMS
+# No "./" prefix: `sha256sum -c` resolves each name against the current directory,
+# and a leading "./" makes it work only when the file was checked out that way.
+sha256sum ./*.jar ./*.tar.gz | sed 's: \./: :' | tee SHA256SUMS
 
 echo
 echo "artifacts in $OUT:"
