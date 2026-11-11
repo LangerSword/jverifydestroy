@@ -8,7 +8,47 @@ import java.io.File;
 
 /** Launches the Swing desktop app. {@code --smoke} builds/disposes; {@code --screenshot=FILE} captures it. */
 public final class Main {
+    /**
+     * True when a window can actually be opened.
+     *
+     * <p>There are two ways this fails and they look the same to a user but are different
+     * problems. {@code DISPLAY} may be unset, so {@code GraphicsEnvironment.isHeadless()}
+     * is true — the normal server case. Or {@code DISPLAY} may point at an X server that
+     * is not running, in which case {@code isHeadless()} says false and the failure only
+     * appears when the toolkit is touched, as an {@link java.awt.AWTError}. Checking only
+     * {@code isHeadless()} therefore lets the second case through and prints a stack
+     * trace at the user.
+     *
+     * <p>Touching the toolkit is the check that actually connects to the display, so the
+     * toolkit is the thing to ask.
+     */
+    private static boolean hasUsableDisplay() {
+        if (GraphicsEnvironment.isHeadless()) return false;
+        try {
+            java.awt.Toolkit.getDefaultToolkit();
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public static void main(String[] args) {
+        // A machine with no display must get a sentence, not a stack trace. The app is a
+        // desktop program, so this is an expected situation on a server or in CI, and a
+        // raw HeadlessException reads as "the app is broken".
+        if (!hasUsableDisplay()) {
+            System.err.println("""
+                    The jvd desktop app needs a graphical display.
+
+                    This machine has no display, so the window cannot open. Use the command
+                    line tool instead:
+
+                      jvd shred FILE --work DIR
+                      jvd verify --work DIR
+                      jvd explain --work DIR
+                    """);
+            System.exit(2);
+        }
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignored) {

@@ -19,10 +19,18 @@ public final class MainFrame extends JFrame {
     private final JComboBox<String> modeBox = new JComboBox<>(new String[]{
             "Crypto-shred  /  key destruction", "Overwrite  /  NIST Clear (weak on flash)"});
     private final JSpinner graceSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 86_400, 1));
-    private final JCheckBox requireBox = new JCheckBox("Require raw-media validation (roll back if NOT_CHECKABLE)");
+    private final JCheckBox requireBox = new JCheckBox("Require raw-media check (roll back if it cannot be checked)");
     private final LogPane logPane = new LogPane();
     private final JTextArea evidenceArea = new JTextArea();
     private final JTabbedPane tabs = new JTabbedPane();
+    private final StageTimeline timeline = new StageTimeline();
+    /** The scrolling form on the left. It is a field because the cards it holds need to
+     *  react to the form being laid out. */
+    private final JPanel form = new ScrollablePanel();
+    private final WrappingLabel requireCaption = new WrappingLabel(
+            "Require a raw-media check",
+            Theme.sans(12, Font.PLAIN), Theme.TEXT);
+    private final ProgressBar progress = new ProgressBar();
     private final JLabel status = new JLabel("Ready");
     private final JLabel statusDot = new JLabel("●");
     private final JLabel stateMetric = new JLabel("—");
@@ -30,9 +38,9 @@ public final class MainFrame extends JFrame {
     private final JLabel assuranceMetric = new JLabel("—");
     private final JLabel controlsMetric = new JLabel("—");
     private final JButton destroyBtn = new Theme.FlatButton("Destroy and commit", true);
-    private final JButton verifyBtn = new Theme.FlatButton("Verify evidence", false);
+    private final JButton verifyBtn = new Theme.FlatButton("Verify", false);
     private final JButton recoverBtn = new Theme.FlatButton("Recover", false);
-    private final JButton testBtn = new Theme.FlatButton("Memory self-test", false);
+    private final JButton testBtn = new Theme.FlatButton("Self-test", false);
     private JSplitPane splitPane;
 
     public MainFrame() {
@@ -85,6 +93,11 @@ public final class MainFrame extends JFrame {
         logPane.append("Ready. Select a file and a work directory, then Destroy.");
         logPane.append("The app keeps its own recovery files in this folder.");
         logPane.append("Once the final step is done, the file cannot be brought back.");
+
+        // Show the plan before the run starts. An empty panel reads as a broken panel, and
+        // seeing the steps up front is also what makes the wait during a large file
+        // understandable: the user knows which step they are on.
+        timeline.setStages(StageWords.DESTRUCTION_STAGES);
     }
 
     public void setSplitFraction(double fraction) {
@@ -92,7 +105,6 @@ public final class MainFrame extends JFrame {
     }
 
     private JComponent buildLeft() {
-        JPanel form = new ScrollablePanel();
         form.setOpaque(false);
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
         form.setBorder(new EmptyBorder(0, 0, Theme.px(8), Theme.px(6)));
@@ -113,14 +125,24 @@ public final class MainFrame extends JFrame {
         grace.add(Theme.section("SECONDS BEFORE COMMIT"));
         options.add(grace, BorderLayout.NORTH);
         requireBox.setOpaque(false);
-        options.add(requireBox, BorderLayout.CENTER);
+        // The caption is deliberately short: a checkbox label that wraps onto a second
+        // line is a caption that gets clipped by the card it sits in, and the detail
+        // belongs in the note underneath anyway.
+        requireBox.setText("");
+        JPanel requireRow = new JPanel(new BorderLayout(Theme.px(6), 0));
+        requireRow.setOpaque(false);
+        requireRow.add(requireBox, BorderLayout.WEST);
+        requireRow.add(requireCaption, BorderLayout.CENTER);
+        options.add(requireRow, BorderLayout.CENTER);
         add(options, method, 2);
 
         RoundedPanel witness = card("03 / RAW-MEDIA WITNESS  ·  OPTIONAL");
         addGroup(witness, 0, "RAW IMAGE", imageField, this::browseImage);
         addGroup(witness, 1, "CANARY HEX", canaryField, null);
         JTextArea note = new JTextArea("The image must contain the canary before destruction; "
-                + "otherwise validation is NOT_CHECKABLE. Physical flash is never verified.");
+                + "otherwise validation is NOT_CHECKABLE. Physical flash is never verified. "
+                + "Tick the raw-media check to roll the destruction back when the image cannot "
+                + "be checked.");
         note.setFont(Theme.sans(11, Font.PLAIN));
         note.setForeground(Theme.MUTED);
         note.setOpaque(false);
@@ -171,9 +193,9 @@ public final class MainFrame extends JFrame {
         actions.add(secondary);
         actions.add(Box.createVerticalStrut(Theme.px(10)));
 
-        JLabel hint = new JLabel("Commit is irreversible. Rollback is available only before COMMIT.");
-        hint.setFont(Theme.mono(10, Font.PLAIN));
-        hint.setForeground(Theme.MUTED);
+        WrappingLabel hint = new WrappingLabel(
+                "Commit cannot be undone. A rollback is possible only before it.",
+                Theme.mono(10, Font.PLAIN), Theme.MUTED);
         hint.setAlignmentX(Component.LEFT_ALIGNMENT);
         actions.add(hint);
 
@@ -185,6 +207,7 @@ public final class MainFrame extends JFrame {
         left.add(actions, BorderLayout.SOUTH);
         return left;
     }
+
 
     private JComponent buildRight() {
         RoundedPanel right = new RoundedPanel(new BorderLayout(), Theme.ELEVATED, Theme.BORDER_SOFT, Theme.px(12));
@@ -207,6 +230,7 @@ public final class MainFrame extends JFrame {
 
         tabs.setOpaque(false);
         tabs.setBorder(null);
+        tabs.addTab("STEPS", scroll(timeline));
         tabs.addTab("LOG", scroll(logPane));
         tabs.addTab("EVIDENCE JSON", scroll(evidenceArea));
         right.add(tabs, BorderLayout.CENTER);
@@ -221,7 +245,20 @@ public final class MainFrame extends JFrame {
         row.add(metric("VALIDATION", validationMetric));
         row.add(metric("ASSURANCE", assuranceMetric));
         row.add(metric("CONTROLS", controlsMetric));
-        return row;
+
+        // The bar sits under the metrics so the four numbers keep their shape while the
+        // bar answers the separate question "how far along are we".
+        JPanel wrap = new JPanel(new BorderLayout(0, Theme.px(10)));
+        wrap.setOpaque(false);
+        wrap.add(row, BorderLayout.NORTH);
+        progress.setPreferredSize(new Dimension(0, Theme.px(6)));
+        progress.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel barWrap = new JPanel(new BorderLayout());
+        barWrap.setOpaque(false);
+        barWrap.setBorder(new EmptyBorder(Theme.px(2), Theme.px(8), 0, Theme.px(8)));
+        barWrap.add(progress, BorderLayout.CENTER);
+        wrap.add(barWrap, BorderLayout.CENTER);
+        return wrap;
     }
 
     private JComponent metric(String label, JLabel value) {
@@ -275,8 +312,30 @@ public final class MainFrame extends JFrame {
         return card;
     }
 
+    /**
+     * Lets a card grow with its content.
+     *
+     * <p>The card's maximum height is its preferred height, which keeps the form from
+     * stretching its cards to fill the panel. That snapshot is taken when the card is
+     * built, so anything inside the card that only becomes tall after it is laid out —
+     * a caption that wraps onto a second line, for instance — would be clipped by it.
+     *
+     * <p>The height is therefore re-taken after the form has been laid out, once the
+     * wrapped captions have their real width.
+     */
     private void fit(RoundedPanel card) {
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
+        // The form is laid out after this method runs, so the correct time to measure is
+        // when the form itself has been laid out.
+        form.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                int h = card.getPreferredSize().height;
+                if (card.getMaximumSize().height != h) {
+                    card.setMaximumSize(new Dimension(Integer.MAX_VALUE, h));
+                    card.revalidate();
+                }
+            }
+        });
     }
 
     private void addGroup(RoundedPanel card, int index, String label, JComponent field, Runnable browse) {
@@ -386,8 +445,13 @@ public final class MainFrame extends JFrame {
                 "Destroy " + target.getFileName() + "?\nThe final step cannot be undone.",
                 "Confirm destruction", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (confirm != JOptionPane.YES_OPTION) return;
+        timeline.setStages(StageWords.DESTRUCTION_STAGES);
+        timeline.reset();
+        progress.reset();
+        tabs.setSelectedIndex(0);
         runAsync("Destroying " + target.getFileName() + "…",
-                () -> AppService.destroy(target, method, work, image, canary, grace, require),
+                () -> AppService.destroy(target, method, work, image, canary, grace, require,
+                        event -> onStage(event)),
                 v -> {
                     evidenceArea.setText(v.evidenceJson());
                     evidenceArea.setCaretPosition(0);
@@ -399,8 +463,23 @@ public final class MainFrame extends JFrame {
                     logPane.append("");
                     logPane.append(v.message().sentence());
                     logPane.append("The Evidence JSON tab holds the technical record.");
-                    tabs.setSelectedIndex(0);
                 });
+    }
+
+    /**
+     * A stage finished. The callback arrives on the worker thread, so the update is
+     * marshalled to the event dispatch thread before it touches a component.
+     */
+    private void onStage(AppService.StageEvent event) {
+        SwingUtilities.invokeLater(() -> {
+            // The stage that just finished is done; the next one is now running. Marking
+            // the running stage is what makes the timeline read as "here is where I am".
+            timeline.markDone(event.index());
+            if (event.index() + 1 < StageWords.DESTRUCTION_STAGES.size()) {
+                timeline.markRunning(event.index() + 1);
+            }
+            progress.setProgress((event.index() + 1.0) / StageWords.DESTRUCTION_STAGES.size());
+        });
     }
 
     private void doVerify() {

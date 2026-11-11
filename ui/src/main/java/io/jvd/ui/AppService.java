@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.function.Consumer;
 
 /** UI-facing facade over the transaction, evidence, log, and verification services. */
 public final class AppService {
@@ -34,10 +35,25 @@ public final class AppService {
 
     public record SelfTestView(String result, List<String> checks) {}
 
+    /**
+     * A stage of a running destruction, in the user's words.
+     *
+     * <p>The desktop app turns these into the stepper. The service layer stays free of
+     * Swing so the whole flow can be tested headlessly.
+     */
+    public record StageEvent(int index, String title, String detail, boolean finished) {}
+
     private AppService() {}
 
+    /**
+     * Destroys a file and reports each stage as it completes.
+     *
+     * <p>The stage callback runs on the worker thread, so an implementation that touches a
+     * user interface must marshal to its own event thread. The desktop app does that.
+     */
     public static DestroyView destroy(Path target, Method method, Path work, Path image,
-                                      String canaryHex, long grace, boolean requireCheckable) throws Exception {
+                                      String canaryHex, long grace, boolean requireCheckable,
+                                      Consumer<StageEvent> onStage) throws Exception {
         Path workAbs = work.toAbsolutePath().normalize();
         Keys keys = Keys.loadOrCreate(workAbs);
         LogStore log = new LogStore(workAbs.resolve("log"), "jvd.local/ui");
@@ -50,8 +66,22 @@ public final class AppService {
                 Arrays.fill(raw, (byte) 0);
             }
             TxnConfig cfg = new TxnConfig(target, method, workAbs, image, masked, grace, !requireCheckable);
+            // Some transaction points map onto the same user-facing stage: COMMITTING and
+            // KEY_DESTROYED are both "Making it final", CONFIRMED and COMMITTED are both
+            // "Writing the receipt". The stepper shows a stage once, so each stage is
+            // reported the first time it is reached and never again.
+            boolean[] reported = new boolean[StageWords.DESTRUCTION_STAGES.size()];
+            DestructionTransaction.StageObserver observer = (point, state) -> {
+                if (onStage == null) return;
+                int index = StageWords.stageIndex(point);
+                if (index < 0 || index >= reported.length) return;
+                if (reported[index]) return;
+                reported[index] = true;
+                StageTimeline.Stage stage = StageWords.DESTRUCTION_STAGES.get(index);
+                onStage.accept(new StageEvent(index, stage.title(), stage.detail(), true));
+            };
             DestructionTransaction txn = new DestructionTransaction(cfg, keys.evidence(), log,
-                    keys.log().getPrivate(), witness);
+                    keys.log().getPrivate(), witness, observer);
             DestructionTransaction.Outcome out = txn.run();
             String evidence = out.record() == null ? "" : out.record().toJson();
             return new DestroyView(out.state().name(),
@@ -67,6 +97,13 @@ public final class AppService {
         } finally {
             if (masked != null) Arrays.fill(masked, (byte) 0);
         }
+    }
+
+    /** Destroys a file without reporting stages. Used by the command line and by tests. */
+    public static DestroyView destroy(Path target, Method method, Path work, Path image,
+                                      String canaryHex, long grace, boolean requireCheckable)
+            throws Exception {
+        return destroy(target, method, work, image, canaryHex, grace, requireCheckable, null);
     }
 
     public static VerifyView verify(Path work) throws Exception {
