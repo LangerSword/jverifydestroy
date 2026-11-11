@@ -21,6 +21,7 @@
     <module>cli</module>
     <module>ui</module>
     <module>experiments</module>
+    <module>web</module>
   </modules>
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
@@ -36,6 +37,16 @@
         <version>${junit.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.jvd</groupId>
+        <artifactId>evidence</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.jvd</groupId>
+        <artifactId>log</artifactId>
+        <version>${project.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
