@@ -95,7 +95,31 @@ public final class MemoryScanner {
                 int carryLen = 0;
                 for (long page = 0; page < pages; page++) {
                     if ((resident[(int) page] & 1) == 0) {
-                        carryLen = 0;
+                        // mincore says the page is not resident, but that is a snapshot taken
+                        // before the read, and a collector can move the canary in the window
+                        // between the two. Skipping the page on the strength of that snapshot
+                        // hides a canary that is really there: the positive control then
+                        // fails, the run is reported INVALID, and a genuine residue is
+                        // reported as a clean result.
+                        //
+                        // So the page is read anyway. A page that truly is not resident
+                        // cannot be read, and the read fails or returns nothing, which is
+                        // counted as an error and is visible in the result. A page that
+                        // holds the canary is read and found. The cost is reading some
+                        // unmapped pages, and the benefit is that the scanner cannot miss
+                        // a canary that a moving collector relocated.
+                        long off = page * PAGE;
+                        int want = (int) Math.min(PAGE, len - off);
+                        int n = readAt(ch, r.start + off, want, buf);
+                        if (n <= 0) { carryLen = 0; continue; }
+                        read += n;
+                        mapped += n;
+                        matches += search(buf.array(), n, masked, carry, carryLen);
+                        carryLen = carry(buf.array(), n, masked, carry, carryLen);
+                        if (matches > 16) {
+                            Arrays.fill(carry, (byte) 0);
+                            return ScanResult.found(matches, regions.size(), mapped, read, readErrors, ms(t0));
+                        }
                         continue;
                     }
                     long off = page * PAGE;
