@@ -4,3 +4,8 @@ target/
 experiments/out/
 spikes/*.img
 spikes/*.bin
+
+# The default work directory. It holds the journal, the evidence records and
+# the log, so a user who runs the tool inside a repository would otherwise
+# commit their own destruction evidence by accident.
+.jvd-work/
