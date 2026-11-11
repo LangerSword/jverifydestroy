@@ -20,4 +20,39 @@
         <artifactId>log</artifactId>
       </dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <!--
+        Produces one self-contained runnable jar: `java -jar web-1.0.0.jar 8080`.
+
+        A deployment of this service wants a single file to copy: a container image
+        layer, a jar dropped next to a systemd unit, or an artifact a hosting
+        platform pulls. Without this, the operator has to assemble a classpath from
+        the working tree, which is exactly what a deployment should not have to do.
+
+        The service makes no network calls of its own and needs nothing at runtime
+        beyond the JDK, so shading the two project modules it depends on is all
+        that is needed.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>io.jvd.web.Main</mainClass>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
